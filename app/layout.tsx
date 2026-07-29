@@ -1,0 +1,34 @@
+import type { Metadata } from "next";
+import "./globals.css";
+import { ToastProvider } from "@/components/ui/Toast";
+
+export const metadata: Metadata = {
+  title: "AjoFlow Admin",
+  description: "AjoFlow administration dashboard.",
+  icons: {
+    icon: [{ url: "/subtech-ajo-logo.svg", type: "image/svg+xml" }],
+    shortcut: "/subtech-ajo-logo.svg",
+    apple: "/subtech-ajo-logo.svg",
+    other: [
+      {
+        rel: "mask-icon",
+        url: "/subtech-ajo-solution-mark-mono-dark.svg",
+        color: "#2563EB",
+      },
+    ],
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body suppressHydrationWarning>
+        <ToastProvider>{children}</ToastProvider>
+      </body>
+    </html>
+  );
+}

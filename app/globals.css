@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+
+  --color-blue-primary: #1A35D4;
+  --color-blue-navy: #0D1A6E;
+  --color-blue-light: #EEF1FB;
+  --color-gold: #F5A623;
+  --color-gold-dark: #6B3C00;
+  --color-text-on-blue: #FFFFFF;
+  --color-text-on-light: #0D1A6E;
+  --color-label-on-light: #1A35D4;
+  --color-brand-primary: #1A35D4;
+  --color-brand-primary-hover: #1529A8;
+  --color-brand-navy: #0D1A6E;
+  --color-brand-accent: #F5A623;
+  --color-brand-accent-dark: #6B3C00;
+  --color-brand-warm: #EEF1FB;
+  --color-brand-emerald: #0F766E;
+  --color-brand-emerald-hover: #0C5E57;
+  --color-brand-azure: #3B82F6;
+  --color-brand-electric: #60A5FA;
+  --color-brand-soft-blue: #EFF6FF;
+  --color-brand-gray: #64748B;
+  --color-brand-light: #EEF1FB;
+  --color-brand-border: #E2E8F0;
+  --color-brand-disabled: #CBD5E1;
+  --color-brand-footer-text: #94A3B8;
+}
+
+@layer base {
+  body {
+    @apply font-sans text-brand-navy bg-white antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer components {
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+}
+
+@keyframes marquee-left {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes marquee-right {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
+/* Custom sidebar scrollbar */
+.sidebar-nav::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 99px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
