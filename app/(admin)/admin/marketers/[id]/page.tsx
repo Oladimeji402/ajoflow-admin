@@ -41,9 +41,13 @@ type TaskRow = {
     title: string;
     description: string;
     status: string;
+    frequency?: string;
     due_at?: string | null;
+    ends_at?: string | null;
     created_at: string;
 };
+
+type TaskFrequency = 'once' | 'daily' | 'weekly' | 'monthly';
 
 type ReferralCounts = {
     attributed: number;
@@ -72,7 +76,10 @@ export default function AdminMarketerDetailPage() {
     const [acting, setActing] = useState(false);
     const [taskTitle, setTaskTitle] = useState('');
     const [taskDescription, setTaskDescription] = useState('');
+    const [taskFrequency, setTaskFrequency] = useState<TaskFrequency>('once');
+    const [taskEndsAt, setTaskEndsAt] = useState('');
     const [savingTask, setSavingTask] = useState(false);
+    const [cancellingTaskId, setCancellingTaskId] = useState<string | null>(null);
     const { showToast } = useToast();
 
     const load = useCallback(async () => {
@@ -163,6 +170,26 @@ export default function AdminMarketerDetailPage() {
         }
     };
 
+    const cancelTask = async (taskId: string) => {
+        if (!window.confirm('Cancel this task? The marketer will no longer be able to update it.')) return;
+        setCancellingTaskId(taskId);
+        try {
+            const res = await fetch(`/api/admin/marketers/tasks/${taskId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'cancelled' }),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Cancel failed.');
+            notifySuccess(showToast, 'Task cancelled.');
+            await load();
+        } catch (err) {
+            notifyError(showToast, err, 'Could not cancel task.');
+        } finally {
+            setCancellingTaskId(null);
+        }
+    };
+
     const createTask = async (e: React.FormEvent) => {
         e.preventDefault();
         setSavingTask(true);
@@ -170,13 +197,22 @@ export default function AdminMarketerDetailPage() {
             const res = await fetch(`/api/admin/marketers/${id}/tasks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: taskTitle, description: taskDescription }),
+                body: JSON.stringify({
+                    title: taskTitle,
+                    description: taskDescription,
+                    frequency: taskFrequency,
+                    endsAt: taskFrequency !== 'once' && taskEndsAt
+                        ? new Date(taskEndsAt).toISOString()
+                        : null,
+                }),
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error);
             notifySuccess(showToast, 'Task assigned.');
             setTaskTitle('');
             setTaskDescription('');
+            setTaskFrequency('once');
+            setTaskEndsAt('');
             await load();
         } catch (err) {
             notifyError(showToast, err, 'Could not assign task.');
@@ -343,21 +379,42 @@ export default function AdminMarketerDetailPage() {
 
             <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-3">
                 <h2 className="font-semibold text-brand-navy">Assign task</h2>
-                <form onSubmit={createTask} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                <form onSubmit={createTask} className="grid gap-2 md:grid-cols-2">
                     <input
                         value={taskTitle}
                         onChange={(e) => setTaskTitle(e.target.value)}
                         placeholder="Task title"
                         required
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm md:col-span-2"
                     />
                     <input
                         value={taskDescription}
                         onChange={(e) => setTaskDescription(e.target.value)}
                         placeholder="Description (optional)"
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm md:col-span-2"
                     />
-                    <button disabled={savingTask} className="rounded-xl bg-brand-navy px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+                    <select
+                        value={taskFrequency}
+                        onChange={(e) => setTaskFrequency(e.target.value as TaskFrequency)}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                    >
+                        <option value="once">Once</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                    {taskFrequency !== 'once' ? (
+                        <input
+                            type="date"
+                            value={taskEndsAt}
+                            onChange={(e) => setTaskEndsAt(e.target.value)}
+                            placeholder="End date"
+                            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                        />
+                    ) : (
+                        <div />
+                    )}
+                    <button disabled={savingTask} className="rounded-xl bg-brand-navy px-4 py-2 text-xs font-bold text-white disabled:opacity-60 md:col-span-2">
                         {savingTask ? 'Saving...' : 'Assign'}
                     </button>
                 </form>
@@ -367,9 +424,23 @@ export default function AdminMarketerDetailPage() {
                     <div className="space-y-2">
                         {tasks.map((task) => (
                             <div key={task.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
-                                <div className="flex justify-between gap-2">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
                                     <p className="font-semibold text-brand-navy">{task.title}</p>
-                                    <span className="text-[10px] font-bold uppercase text-brand-gray">{task.status.replace('_', ' ')}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold uppercase text-brand-gray">
+                                            {(task.frequency ?? 'once')} · {task.status.replace('_', ' ')}
+                                        </span>
+                                        {task.status !== 'cancelled' && task.status !== 'done' && (
+                                            <button
+                                                type="button"
+                                                disabled={cancellingTaskId === task.id}
+                                                onClick={() => void cancelTask(task.id)}
+                                                className="rounded-lg border border-red-200 bg-white px-2 py-1 text-[10px] font-bold uppercase text-red-700 hover:bg-red-50 disabled:opacity-60"
+                                            >
+                                                {cancellingTaskId === task.id ? '...' : 'Cancel'}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 {task.description && <p className="text-xs text-brand-gray mt-1">{task.description}</p>}
                             </div>

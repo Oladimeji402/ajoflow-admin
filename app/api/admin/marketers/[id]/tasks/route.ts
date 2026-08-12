@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequestResponse, requireAdmin, serverErrorResponse } from "@/lib/api/auth";
 import { logAdminAction } from "@/lib/admin-audit";
+import { DEFAULT_TASK_TIMEZONE } from "@/lib/marketer-task-periods";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const createSchema = z.object({
   title: z.string().min(2),
   description: z.string().default(""),
   dueAt: z.string().datetime().optional().nullable(),
+  frequency: z.enum(["once", "daily", "weekly", "monthly"]).optional().default("once"),
+  endsAt: z.string().datetime().optional().nullable(),
 });
 
 type Context = { params: Promise<{ id: string }> };
@@ -68,6 +71,9 @@ export async function POST(request: Request, context: Context) {
 
     if (!marketer) return NextResponse.json({ error: "Marketer not found." }, { status: 404 });
 
+    const frequency = parsed.data.frequency ?? "once";
+    const endsAt = frequency === "once" ? null : parsed.data.endsAt || null;
+
     const { data, error } = await adminSupabase
       .from("marketer_tasks")
       .insert({
@@ -75,6 +81,10 @@ export async function POST(request: Request, context: Context) {
         title: parsed.data.title.trim(),
         description: parsed.data.description?.trim() || "",
         due_at: parsed.data.dueAt || null,
+        frequency,
+        timezone: DEFAULT_TASK_TIMEZONE,
+        ends_at: endsAt,
+        starts_at: new Date().toISOString(),
         created_by: auth.user.id,
         status: "open",
       })

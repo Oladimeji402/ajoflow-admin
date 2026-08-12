@@ -24,6 +24,7 @@ import {
     ChevronDown,
     ClipboardList,
     List,
+    BarChart3,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { adminLogout, getAdminEmail } from '@/lib/admin-auth';
@@ -40,6 +41,7 @@ function getPageTitle(pathname: string): string {
     if (pathname === '/admin') return 'Overview';
     if (pathname === '/admin/marketers') return 'Marketers';
     if (pathname === '/admin/marketers/assign-tasks') return 'Assign Tasks';
+    if (pathname === '/admin/marketers/task-progress') return 'Task Progress';
     if (pathname.startsWith('/admin/marketers/')) return 'Marketer Detail';
     const last = pathname.split('/').filter(Boolean).pop() ?? 'Admin';
     return last.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -140,6 +142,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
             children: [
                 { name: 'All Marketers', path: '/admin/marketers', icon: List },
                 { name: 'Assign Tasks', path: '/admin/marketers/assign-tasks', icon: ClipboardList },
+                { name: 'Task Progress', path: '/admin/marketers/task-progress', icon: BarChart3 },
             ],
         },
         { name: 'Passbook', icon: BookOpen, path: '/admin/passbook' },

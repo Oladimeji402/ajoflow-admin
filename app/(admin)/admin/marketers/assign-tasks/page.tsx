@@ -19,9 +19,12 @@ type AssignedTask = {
   title: string;
   description: string;
   status: string;
+  frequency?: string;
   created_at: string;
   marketers?: { id: string; name: string; referral_code: string } | null;
 };
+
+type TaskFrequency = 'once' | 'daily' | 'weekly' | 'monthly';
 
 export default function AdminAssignMarketerTasksPage() {
   const [marketers, setMarketers] = useState<Marketer[]>([]);
@@ -33,6 +36,9 @@ export default function AdminAssignMarketerTasksPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueAt, setDueAt] = useState('');
+  const [frequency, setFrequency] = useState<TaskFrequency>('once');
+  const [endsAt, setEndsAt] = useState('');
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const { showToast } = useToast();
 
   const load = async () => {
@@ -83,6 +89,26 @@ export default function AdminAssignMarketerTasksPage() {
     });
   };
 
+  const cancelTask = async (taskId: string) => {
+    if (!window.confirm('Cancel this task? The marketer will no longer be able to update it.')) return;
+    setCancellingId(taskId);
+    try {
+      const res = await fetch(`/api/admin/marketers/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Cancel failed.');
+      notifySuccess(showToast, 'Task cancelled.');
+      await load();
+    } catch (err) {
+      notifyError(showToast, err, 'Could not cancel task.');
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedIds.length === 0) {
@@ -98,6 +124,8 @@ export default function AdminAssignMarketerTasksPage() {
           title,
           description,
           dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+          frequency,
+          endsAt: frequency !== 'once' && endsAt ? new Date(endsAt).toISOString() : null,
           marketerIds: selectedIds,
         }),
       });
@@ -111,6 +139,8 @@ export default function AdminAssignMarketerTasksPage() {
       setTitle('');
       setDescription('');
       setDueAt('');
+      setFrequency('once');
+      setEndsAt('');
       setSelectedIds([]);
       await load();
     } catch (err) {
@@ -166,17 +196,38 @@ export default function AdminAssignMarketerTasksPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-brand-gray mb-1">Due date (optional)</label>
+            <label className="block text-xs font-semibold text-brand-gray mb-1">Frequency</label>
+            <select
+              value={frequency}
+              onChange={(e) => setFrequency(e.target.value as TaskFrequency)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+            >
+              <option value="once">Once</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-brand-gray mb-1">
+              {frequency === 'once' ? 'Due date (optional)' : 'End date (optional)'}
+            </label>
             <input
               type="date"
-              value={dueAt}
-              onChange={(e) => setDueAt(e.target.value)}
+              value={frequency === 'once' ? dueAt : endsAt}
+              onChange={(e) => {
+                if (frequency === 'once') setDueAt(e.target.value);
+                else setEndsAt(e.target.value);
+              }}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
             />
           </div>
-          <div className="flex items-end">
+          <div className="md:col-span-2 flex items-end">
             <p className="text-xs text-brand-gray">
               Selected: <span className="font-semibold text-brand-navy">{selectedIds.length}</span> marketer{selectedIds.length === 1 ? '' : 's'}
+              {frequency !== 'once' ? (
+                <span className="ml-2">· Marketers will mark done each {frequency === 'daily' ? 'day' : frequency === 'weekly' ? 'week' : 'month'}.</span>
+              ) : null}
             </p>
           </div>
         </div>
@@ -270,12 +321,26 @@ export default function AdminAssignMarketerTasksPage() {
                       {task.marketers?.name ?? 'Marketer'}
                       {task.marketers?.referral_code ? ` · ${task.marketers.referral_code}` : ''}
                       {' · '}
+                      {(task.frequency ?? 'once').replace('_', ' ')}
+                      {' · '}
                       {new Date(task.created_at).toLocaleString('en-NG')}
                     </p>
                   </div>
-                  <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase text-brand-gray">
-                    {task.status.replace('_', ' ')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase text-brand-gray">
+                      {task.status.replace('_', ' ')}
+                    </span>
+                    {task.status !== 'cancelled' && task.status !== 'done' && (
+                      <button
+                        type="button"
+                        disabled={cancellingId === task.id}
+                        onClick={() => void cancelTask(task.id)}
+                        className="rounded-lg border border-red-200 bg-white px-2 py-1 text-[10px] font-bold uppercase text-red-700 hover:bg-red-50 disabled:opacity-60"
+                      >
+                        {cancellingId === task.id ? '...' : 'Cancel'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

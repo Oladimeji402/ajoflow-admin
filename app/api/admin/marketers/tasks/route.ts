@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequestResponse, requireAdmin, serverErrorResponse } from "@/lib/api/auth";
 import { logAdminAction } from "@/lib/admin-audit";
+import { DEFAULT_TASK_TIMEZONE } from "@/lib/marketer-task-periods";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const assignSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters."),
   description: z.string().default(""),
   dueAt: z.string().optional().nullable(),
+  frequency: z.enum(["once", "daily", "weekly", "monthly"]).optional().default("once"),
+  endsAt: z.string().optional().nullable(),
   marketerIds: z.array(z.string().uuid()).min(1, "Select at least one marketer."),
 });
 
@@ -53,11 +56,17 @@ export async function POST(request: Request) {
     }
 
     const dueAt = parsed.data.dueAt?.trim() ? parsed.data.dueAt.trim() : null;
+    const endsAt = parsed.data.endsAt?.trim() ? parsed.data.endsAt.trim() : null;
+    const frequency = parsed.data.frequency ?? "once";
     const rows = marketers.map((m) => ({
       marketer_id: m.id,
       title: parsed.data.title.trim(),
       description: parsed.data.description?.trim() || "",
       due_at: dueAt,
+      frequency,
+      timezone: DEFAULT_TASK_TIMEZONE,
+      ends_at: frequency === "once" ? null : endsAt,
+      starts_at: new Date().toISOString(),
       created_by: auth.user!.id,
       status: "open" as const,
     }));
@@ -65,7 +74,7 @@ export async function POST(request: Request) {
     const { data, error } = await adminSupabase
       .from("marketer_tasks")
       .insert(rows)
-      .select("id, marketer_id, title, status, created_at");
+      .select("id, marketer_id, title, status, frequency, created_at");
 
     if (error) return badRequestResponse(error.message);
 
@@ -76,6 +85,8 @@ export async function POST(request: Request) {
       targetId: data?.[0]?.id ?? uniqueIds[0],
       after: {
         title: parsed.data.title.trim(),
+        frequency,
+        ends_at: endsAt,
         marketer_ids: uniqueIds,
         count: data?.length ?? 0,
       },
