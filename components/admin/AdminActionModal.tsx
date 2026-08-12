@@ -86,6 +86,20 @@ export function AdminActionModal({
     const style = severityStyles[severity];
     const IconComponent = CustomIcon || style.icon;
 
+    React.useEffect(() => {
+        if (!isOpen) return;
+        const defaults: Record<string, string | number> = {};
+        for (const field of requiresInput) {
+            if (field.defaultValue !== undefined) {
+                defaults[field.name] = field.defaultValue;
+            }
+        }
+        setFormData(defaults);
+        setErrors({});
+        // Seed defaults only when the modal opens.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     const handleInputChange = (name: string, value: string | number) => {

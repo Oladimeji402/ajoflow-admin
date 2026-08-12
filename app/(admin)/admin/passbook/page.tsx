@@ -10,7 +10,8 @@ import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { useToast } from '@/components/ui/Toast';
 import { notifyError, notifySuccess } from '@/lib/toast';
 import { useRefreshOnFocus } from '@/lib/hooks/useRefreshOnFocus';
-import { BookOpen, CheckCircle2, XCircle, Mail, MessageSquare, Calendar } from 'lucide-react';
+import { AdminActionModal } from '@/components/admin/AdminActionModal';
+import { BookOpen, CheckCircle2, XCircle, Mail, MessageSquare, Calendar, Pencil } from 'lucide-react';
 
 const PASSBOOK_REALTIME_TABLES = ['profiles'];
 
@@ -67,11 +68,29 @@ export default function AdminPassbookPage() {
   const [activationTrends, setActivationTrends] = useState<ActivationTrend[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [passbookFee, setPassbookFee] = useState<number>(500);
+  const [feeUpdatedAt, setFeeUpdatedAt] = useState<string | null>(null);
+  const [feeModalOpen, setFeeModalOpen] = useState(false);
+  const [savingFee, setSavingFee] = useState(false);
   const { showToast } = useToast();
   const { refreshTrigger, lastEvent } = useRealtimeSubscription({
     channelName: 'admin-passbook-live',
     tables: PASSBOOK_REALTIME_TABLES,
   });
+
+  const feeInputFields = useMemo(
+    () => [
+      {
+        name: 'amount',
+        label: 'Activation fee (NGN)',
+        type: 'number' as const,
+        required: true,
+        defaultValue: passbookFee,
+        placeholder: 'e.g. 500',
+      },
+    ],
+    [passbookFee],
+  );
 
   useEffect(() => {
     if (lastEvent?.timestamp) {
@@ -80,18 +99,26 @@ export default function AdminPassbookPage() {
   }, [lastEvent]);
 
   const loadAll = useCallback(async () => {
-    const [usersRes, trendsRes] = await Promise.all([
+    const [usersRes, trendsRes, feeRes] = await Promise.all([
       fetch('/api/admin/passbook?page=1&pageSize=500', { cache: 'no-store' }),
       fetch('/api/admin/passbook/trends?days=90', { cache: 'no-store' }),
+      fetch('/api/admin/passbook/fee', { cache: 'no-store' }),
     ]);
 
-    const [usersJson, trendsJson] = await Promise.all([usersRes.json(), trendsRes.json()]);
+    const [usersJson, trendsJson, feeJson] = await Promise.all([
+      usersRes.json(),
+      trendsRes.json(),
+      feeRes.json(),
+    ]);
 
     if (!usersRes.ok) throw new Error(usersJson.error || 'Failed to load passbook data.');
     if (!trendsRes.ok) throw new Error(trendsJson.error || 'Failed to load activation trends.');
+    if (!feeRes.ok) throw new Error(feeJson.error || 'Failed to load passbook fee.');
 
     setUsers(Array.isArray(usersJson.data) ? usersJson.data : []);
     setActivationTrends(Array.isArray(trendsJson.data) ? trendsJson.data : []);
+    setPassbookFee(Number(feeJson.data?.amount ?? 500));
+    setFeeUpdatedAt(feeJson.data?.updatedAt ?? null);
     setLastSyncedAt(new Date().toISOString());
   }, []);
 
@@ -160,7 +187,6 @@ export default function AdminPassbookPage() {
       return;
     }
 
-    // Get selected users
     const selectedUsers = users.filter(u => selectedIds.includes(u.id));
     const notActivatedSelected = selectedUsers.filter(u => !u.passbook_activated);
 
@@ -169,7 +195,6 @@ export default function AdminPassbookPage() {
       return;
     }
 
-    // Redirect to communications page with pre-filled data
     const params = new URLSearchParams({
       campaign_name: 'Passbook Activation Reminder',
       channel: type,
@@ -178,6 +203,36 @@ export default function AdminPassbookPage() {
     });
 
     window.location.href = `/admin/communications?${params.toString()}`;
+  };
+
+  const savePassbookFee = async (formData?: Record<string, string | number>) => {
+    const raw = formData?.amount;
+    const amount = typeof raw === 'number' ? raw : Number(String(raw ?? '').replace(/,/g, ''));
+
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount)) {
+      notifyError(showToast, new Error('Invalid amount'), 'Enter a whole NGN amount greater than zero.');
+      return;
+    }
+
+    setSavingFee(true);
+    try {
+      const res = await fetch('/api/admin/passbook/fee', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to update passbook fee.');
+
+      setPassbookFee(Number(json.data?.amount ?? amount));
+      setFeeUpdatedAt(json.data?.updatedAt ?? new Date().toISOString());
+      setFeeModalOpen(false);
+      notifySuccess(showToast, `Passbook fee updated to NGN ${Number(json.data?.amount ?? amount).toLocaleString('en-NG')}.`);
+    } catch (err) {
+      notifyError(showToast, err, 'Unable to update passbook fee.');
+    } finally {
+      setSavingFee(false);
+    }
   };
 
   const columns: Array<DataTableColumn<PassbookUserRow>> = useMemo(
@@ -315,6 +370,32 @@ export default function AdminPassbookPage() {
 
       <LastSynced timestamp={lastSyncedAt} loading={loading} />
 
+      <div className="rounded-xl border border-slate-100 bg-white p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-gray">Activation fee</p>
+          <p className="mt-1 text-2xl font-bold text-brand-navy">
+            NGN {passbookFee.toLocaleString('en-NG')}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Charged once when a user activates their passbook from wallet.
+            {feeUpdatedAt
+              ? ` Last updated ${new Date(feeUpdatedAt).toLocaleString('en-NG', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}.`
+              : ''}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setFeeModalOpen(true)}
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-brand-navy transition hover:bg-slate-100"
+        >
+          <Pencil size={14} />
+          Update amount
+        </button>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-slate-100 bg-white p-4">
           <p className="text-xs text-brand-gray">Total Users</p>
@@ -412,6 +493,19 @@ export default function AdminPassbookPage() {
           emptyMessage="No users found."
         />
       </div>
+
+      <AdminActionModal
+        isOpen={feeModalOpen}
+        onClose={() => !savingFee && setFeeModalOpen(false)}
+        onConfirm={savePassbookFee}
+        title="Update passbook activation fee"
+        description="This amount is charged once from a user’s wallet when they activate their passbook. Existing activations are not affected."
+        confirmLabel="Save fee"
+        severity="warning"
+        isLoading={savingFee}
+        showAuditNote
+        requiresInput={feeInputFields}
+      />
     </div>
   );
 }
