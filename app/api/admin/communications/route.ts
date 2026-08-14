@@ -112,7 +112,7 @@ const createMessageSchema = z.object({
     email_body: z.string().optional(),
     sms_body: z.string().optional(),
     in_app_body: z.string().optional(),
-    audience_type: z.enum(['all', 'group_members', 'custom_filter']),
+    audience_type: z.enum(['all', 'custom_filter']),
     audience_filter: z.record(z.string(), z.any()).optional(),
     group_ids: z.array(z.string().uuid()).optional(),
     template_id: z.string().uuid().optional(),
@@ -195,23 +195,7 @@ export async function POST(request: NextRequest) {
         // Build recipient list based on audience type
         let recipientQuery = supabase.from('profiles').select('id, name, email, phone');
 
-        if (audience_type === 'group_members' && group_ids && group_ids.length > 0) {
-            // Get users who are members of specified groups
-            const { data: members } = await supabase
-                .from('group_members')
-                .select('user_id')
-                .in('group_id', group_ids);
-
-            if (!members || members.length === 0) {
-                return NextResponse.json(
-                    { error: 'No members found in selected groups' },
-                    { status: 400 }
-                );
-            }
-
-            const userIds = members.map(m => m.user_id);
-            recipientQuery = recipientQuery.in('id', userIds);
-        } else if (audience_type === 'custom_filter' && audience_filter) {
+        if (audience_type === 'custom_filter' && audience_filter) {
             // Apply custom filters
             if (audience_filter.status) {
                 recipientQuery = recipientQuery.eq('status', audience_filter.status);

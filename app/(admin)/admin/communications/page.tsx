@@ -95,7 +95,7 @@ function ComposeMessageForm({ templates, onMessageSent }: {
         email_body: '',
         sms_body: '',
         in_app_body: '',
-        audience_type: 'all' as 'all' | 'group_members' | 'custom_filter',
+        audience_type: 'all' as 'all' | 'custom_filter',
         group_ids: [] as string[],
         scheduled_for: '',
         send_now: false,

@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  RATE_LIMITS,
+  enforceRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_WINDOW_MINUTES = 15;
-
-function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0]?.trim() || "unknown";
-  }
-
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
 
 function normalizeEmail(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -19,6 +16,13 @@ function normalizeEmail(value: unknown) {
 
 export async function POST(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const limited = await enforceRateLimit(
+      `admin-login-attempt:${ip}`,
+      RATE_LIMITS.adminLoginAttempt,
+    );
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSeconds);
+
     const body = await request.json().catch(() => ({}));
     const email = normalizeEmail(body.email);
     const succeeded = body.succeeded as boolean | undefined;
@@ -27,7 +31,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "email is required." }, { status: 400 });
     }
 
-    const ip = getClientIp(request);
     const supabase = createSupabaseAdminClient();
     const userAgent = request.headers.get("user-agent") ?? null;
 
