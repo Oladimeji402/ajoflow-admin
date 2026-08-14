@@ -31,7 +31,7 @@ import { adminLogout, getAdminEmail } from '@/lib/admin-auth';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
-const LAYOUT_REALTIME_TABLES = ['payouts', 'profiles', 'savings_schemes', 'passbook_payouts', 'marketers'];
+const LAYOUT_REALTIME_TABLES = ['profiles', 'savings_schemes', 'passbook_payouts', 'marketers'];
 
 function formatBadgeCount(value: number) {
     return value > 99 ? '99+' : String(value);

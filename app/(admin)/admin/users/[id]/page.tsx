@@ -3,593 +3,697 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Activity, ArrowLeft, Banknote, Landmark, Shield, TriangleAlert, UserCog, X } from 'lucide-react';
+import {
+  Activity,
+  ArrowLeft,
+  Banknote,
+  Landmark,
+  Shield,
+  UserCog,
+  Wallet,
+  Copy,
+  Check,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { notifyError, notifySuccess } from '@/lib/toast';
 import { useRefreshOnFocus } from '@/lib/hooks/useRefreshOnFocus';
 import { UserAccountActions } from '@/components/admin/UserAccountActions';
 import { UserNotesAndFlagsSection } from '@/components/admin/UserNotesAndFlagsSection';
 import { FlagType } from '@/components/admin/UserFlagBadge';
+import { AdminActionModal } from '@/components/admin/AdminActionModal';
+import { Modal } from '@/components/ui/Modal';
+
+type TabId = 'overview' | 'money' | 'risk';
 
 type UserDetail = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  bank_name?: string | null;
+  bank_account?: string | null;
+  bank_account_name?: string | null;
+  virtual_account_number?: string | null;
+  virtual_account_bank?: string | null;
+  virtual_account_name?: string | null;
+  role: string;
+  status: string;
+  kyc_level: number;
+  wallet_balance: number;
+  total_contributed: number;
+  total_received: number;
+  created_at?: string;
+  updated_at?: string;
+  account_locked?: boolean;
+  suspension_reason?: string | null;
+  suspended_at?: string | null;
+  marketer_id?: string | null;
+  referral_code_used?: string | null;
+  marketer?: {
     id: string;
     name: string;
-    email: string;
-    phone?: string | null;
-    bank_name?: string | null;
-    bank_account?: string | null;
-    bank_account_name?: string | null;
-    virtual_account_number?: string | null;
-    virtual_account_bank?: string | null;
-    virtual_account_name?: string | null;
-    role: string;
+    referral_code: string;
     status: string;
-    kyc_level: number;
-    wallet_balance: number;
-    total_contributed: number;
-    total_received: number;
-    created_at?: string;
-    updated_at?: string;
-    account_locked?: boolean;
-    suspension_reason?: string | null;
-    suspended_at?: string | null;
-    marketer_id?: string | null;
-    referral_code_used?: string | null;
-    marketer?: {
-        id: string;
-        name: string;
-        referral_code: string;
-        status: string;
-    } | null;
+  } | null;
 };
 
 type UserActivity = {
-    id: string;
-    type: 'target_contribution' | 'general_deposit' | 'general_payout' | string;
-    status: string;
-    title: string;
-    description: string;
-    amount: number | null;
-    occurredAt: string;
+  id: string;
+  type: string;
+  status: string;
+  title: string;
+  description: string;
+  amount: number | null;
+  occurredAt: string;
 };
 
 type SavingsPlan = {
-    id: string;
-    planType: 'target' | 'general';
-    name: string;
-    frequency: string;
-    status: string;
-    targetAmount?: number;
-    minimumAmount?: number;
-    totalSaved: number;
-    successfulCount: number;
-    missedCount: number;
-    skippedCount: number;
-    pendingCount: number;
-    startDate?: string | null;
-    targetDate?: string | null;
-    createdAt?: string;
-    lastPaidAt?: string | null;
+  id: string;
+  planType: 'target' | 'general';
+  name: string;
+  frequency: string;
+  status: string;
+  targetAmount?: number;
+  minimumAmount?: number;
+  totalSaved: number;
+  successfulCount: number;
+  missedCount: number;
+  skippedCount: number;
+  pendingCount: number;
 };
 
-const actionButtonClassName = 'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow active:translate-y-0 disabled:opacity-60';
+function money(n: number) {
+  return `₦${Number(n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
+}
+
+function initials(value: string) {
+  const parts = value.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || 'U';
+}
 
 function UserDetailSkeleton() {
-    return (
-        <div className="space-y-4 animate-pulse">
-            <div className="h-4 w-28 rounded bg-slate-200" />
-            <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-4">
-                <div className="h-7 w-60 rounded bg-slate-200" />
-                <div className="h-4 w-80 rounded bg-slate-200" />
-                <div className="grid sm:grid-cols-2 gap-3">
-                    {Array.from({ length: 6 }, (_, idx) => (
-                        <div key={idx} className="rounded-xl bg-slate-50 p-3 space-y-2">
-                            <div className="h-3 w-24 rounded bg-slate-200" />
-                            <div className="h-4 w-32 rounded bg-slate-200" />
-                        </div>
-                    ))}
-                </div>
-                <div className="flex gap-2">
-                    <div className="h-9 w-28 rounded-lg bg-slate-200" />
-                    <div className="h-9 w-24 rounded-lg bg-slate-200" />
-                </div>
-            </div>
-            <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-3">
-                <div className="h-5 w-32 rounded bg-slate-200" />
-                <div className="grid gap-2">
-                    {Array.from({ length: 3 }, (_, idx) => (
-                        <div key={idx} className="h-14 rounded-xl bg-slate-100" />
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
+  return (
+    <div className="mx-auto max-w-3xl space-y-4 animate-pulse">
+      <div className="h-4 w-24 rounded bg-slate-200" />
+      <div className="h-28 rounded-2xl bg-slate-100" />
+      <div className="h-10 rounded-xl bg-slate-100" />
+      <div className="h-64 rounded-2xl bg-slate-100" />
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-slate-100 py-2.5 last:border-0">
+      <span className="shrink-0 text-xs text-slate-500">{label}</span>
+      <span className="text-right text-sm font-semibold text-brand-navy">{value}</span>
+    </div>
+  );
 }
 
 export default function AdminUserDetailPage() {
-    const params = useParams<{ id: string }>();
-    const id = params.id;
+  const params = useParams<{ id: string }>();
+  const id = params.id;
 
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState('');
-    const [user, setUser] = useState<UserDetail | null>(null);
-    const [savingsPlans, setSavingsPlans] = useState<SavingsPlan[]>([]);
-    const [recentActivity, setRecentActivity] = useState<UserActivity[]>([]);
-    const [confirmAction, setConfirmAction] = useState<{ type: 'role' | 'status'; nextValue: string } | null>(null);
-    const [activeFlags, setActiveFlags] = useState<Array<{ id: string; flagType: FlagType; flagLabel?: string }>>([]);
-    const [currentAdminId, setCurrentAdminId] = useState<string>('');
-    const { showToast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [user, setUser] = useState<UserDetail | null>(null);
+  const [savingsPlans, setSavingsPlans] = useState<SavingsPlan[]>([]);
+  const [recentActivity, setRecentActivity] = useState<UserActivity[]>([]);
+  const [activeFlags, setActiveFlags] = useState<
+    Array<{ id: string; flagType: FlagType; flagLabel?: string }>
+  >([]);
+  const [currentAdminId, setCurrentAdminId] = useState('');
+  const [tab, setTab] = useState<TabId>('overview');
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'role' | 'status';
+    nextValue: string;
+  } | null>(null);
+  const [vaModal, setVaModal] = useState<'provision' | 'clear' | null>(null);
+  const [vaForm, setVaForm] = useState({ accountNumber: '', bankName: '', accountName: '' });
+  const [copied, setCopied] = useState(false);
+  const { showToast } = useToast();
 
-    const loadUser = useCallback(async () => {
-        const res = await fetch(`/api/admin/users/${id}`, { cache: 'no-store' });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Failed to load user.');
-        setUser(json.data as UserDetail);
-        setSavingsPlans(Array.isArray(json.savingsPlans) ? (json.savingsPlans as SavingsPlan[]) : []);
-        setRecentActivity(Array.isArray(json.recentActivity) ? (json.recentActivity as UserActivity[]) : []);
-        
-        // Load flags
-        try {
-            const flagsRes = await fetch(`/api/admin/users/${id}/flags?active=true`, { cache: 'no-store' });
-            const flagsJson = await flagsRes.json();
-            if (flagsRes.ok && flagsJson.data?.activeFlags) {
-                setActiveFlags(flagsJson.data.activeFlags);
-            }
-        } catch (err) {
-            console.error('Failed to load flags:', err);
-        }
-    }, [id]);
-
-    useEffect(() => {
-        const run = async () => {
-            setLoading(true);
-            setError('');
-            try {
-                await loadUser();
-                
-                // Get current admin ID using supabase client
-                const { createBrowserClient } = await import('@supabase/ssr');
-                const supabase = createBrowserClient(
-                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-                );
-                
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user?.id) {
-                    setCurrentAdminId(user.id);
-                }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Unable to load user.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        void run();
-    }, [id, loadUser]);
-
-    useRefreshOnFocus(() => {
-        void loadUser();
-    });
-
-    const patchUser = async (updates: Record<string, unknown>) => {
-        setSaving(true);
-        setError('');
-
-        try {
-            const res = await fetch(`/api/admin/users/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updates),
-            });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json.error || 'Failed to update user.');
-            notifySuccess(showToast, 'User updated successfully.');
-            await loadUser();
-        } catch (err) {
-            notifyError(showToast, err, 'Unable to update user.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const toggleRole = async () => {
-        if (!user) return;
-        const nextRole = user.role === 'admin' ? 'user' : 'admin';
-        setConfirmAction({ type: 'role', nextValue: nextRole });
-    };
-
-    const toggleStatus = async () => {
-        if (!user) return;
-        const nextStatus = user.status === 'active' ? 'suspended' : 'active';
-        setConfirmAction({ type: 'status', nextValue: nextStatus });
-    };
-
-    const executeConfirmedAction = async () => {
-        if (!confirmAction) return;
-
-        if (confirmAction.type === 'role') {
-            await patchUser({ role: confirmAction.nextValue });
-        } else {
-            await patchUser({ status: confirmAction.nextValue });
-        }
-
-        setConfirmAction(null);
-    };
-
-    if (loading) return <UserDetailSkeleton />;
-    if (!user) return <div className="text-sm text-red-600">User not found.</div>;
-
-    return (
-        <div className="space-y-4">
-            <Link href="/admin/users" className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-gray transition-colors hover:text-brand-navy"><ArrowLeft size={14} /> Back to users</Link>
-            <div className="rounded-xl border border-slate-100 bg-white p-5 space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-xl font-bold text-brand-navy">{user.name || user.email}</h1>
-                            {user.status === 'suspended' && (
-                                <span className="rounded-full bg-red-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-200">
-                                    Suspended
-                                </span>
-                            )}
-                            {user.account_locked && (
-                                <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 border border-amber-200">
-                                    Locked
-                                </span>
-                            )}
-                        </div>
-                        <p className="mt-1 text-sm text-brand-gray">{user.email} · {user.phone || 'No phone'}</p>
-                        {user.status === 'suspended' && user.suspension_reason && (
-                            <p className="mt-2 text-xs text-red-600">
-                                <strong>Reason:</strong> {user.suspension_reason}
-                            </p>
-                        )}
-                    </div>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600">
-                        <Shield size={12} className="text-emerald-600" /> Admin profile control
-                    </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3"><p className="text-xs text-brand-gray">Total Saved</p><p className="font-bold text-brand-navy">NGN {Number(user.total_contributed).toLocaleString('en-NG')}</p></div>
-                    <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3"><p className="text-xs text-brand-gray">Total Received</p><p className="font-bold text-brand-navy">NGN {Number(user.total_received).toLocaleString('en-NG')}</p></div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-brand-gray">Role</p><p className="font-bold text-brand-navy capitalize">{user.role}</p></div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-brand-gray">Status</p><p className="font-bold text-brand-navy capitalize">{user.status}</p></div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-brand-gray">Wallet Balance</p><p className="font-bold text-brand-navy">NGN {Number(user.wallet_balance).toLocaleString('en-NG')}</p></div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-brand-gray">KYC Level</p><p className="font-bold text-brand-navy">Level {user.kyc_level}</p></div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-brand-gray">Profile Created</p><p className="font-bold text-brand-navy">{user.created_at ? new Date(user.created_at).toLocaleDateString('en-NG') : 'N/A'}</p></div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-brand-gray">Last Updated</p><p className="font-bold text-brand-navy">{user.updated_at ? new Date(user.updated_at).toLocaleDateString('en-NG') : 'N/A'}</p></div>
-                    {user.marketer ? (
-                        <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3 sm:col-span-2">
-                            <div className="flex items-center gap-2 mb-1">
-                                <p className="text-xs text-brand-gray">Referred by Marketer</p>
-                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 border border-emerald-100">
-                                    Attributed
-                                </span>
-                            </div>
-                            <p className="font-bold text-brand-navy">
-                                <Link href={`/admin/marketers/${user.marketer.id}`} className="hover:underline">
-                                    {user.marketer.name}
-                                </Link>
-                                {' '}· <code className="text-xs font-mono">{user.marketer.referral_code}</code>
-                            </p>
-                            {user.referral_code_used && user.referral_code_used !== user.marketer.referral_code && (
-                                <p className="mt-1 text-xs text-brand-gray">Code used at signup: {user.referral_code_used}</p>
-                            )}
-                        </div>
-                    ) : user.referral_code_used ? (
-                        <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 sm:col-span-2">
-                            <div className="flex items-center gap-2 mb-1">
-                                <p className="text-xs text-brand-gray">Referral Code</p>
-                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 border border-amber-200">
-                                    Pending
-                                </span>
-                            </div>
-                            <p className="font-bold text-brand-navy">
-                                <code className="text-xs font-mono">{user.referral_code_used}</code>
-                            </p>
-                            <p className="mt-1 text-xs text-brand-gray">
-                                Awaiting passbook activation before counting toward the marketer.
-                            </p>
-                        </div>
-                    ) : null}
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <button
-                        disabled={saving}
-                        onClick={() => void toggleRole()}
-                        className={`${actionButtonClassName} bg-brand-navy text-white focus:outline-none focus:ring-4 focus:ring-brand-navy/20`}
-                    >
-                        <UserCog size={14} /> {user.role === 'admin' ? 'Make User' : 'Make Admin'}
-                    </button>
-                    <button
-                        disabled={saving}
-                        onClick={() => void toggleStatus()}
-                        className={`${actionButtonClassName} border border-slate-200 bg-white text-brand-navy focus:outline-none focus:ring-4 focus:ring-slate-200`}
-                    >
-                        <Shield size={14} /> {user.status === 'active' ? 'Suspend' : 'Activate'}
-                    </button>
-                </div>
-
-                {error && <p className="text-xs text-red-600">{error}</p>}
-            </div>
-
-            <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-3">
-                <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-navy"><UserCog size={14} className="text-blue-600" /> Contact Information</h2>
-                <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Full Name</p>
-                        <p className="font-bold text-brand-navy">{user.name || 'Not set'}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Email Address</p>
-                        <p className="font-bold text-brand-navy break-all">{user.email}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Phone Number</p>
-                        <p className="font-bold text-brand-navy">{user.phone || 'Not set'}</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-3">
-                <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-navy"><Landmark size={14} className="text-indigo-600" /> Payout Account</h2>
-                <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Bank</p>
-                        <p className="font-bold text-brand-navy">{user.bank_name || 'Not set'}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Account Number</p>
-                        <p className="font-bold text-brand-navy">{user.bank_account || 'Not set'}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Account Name</p>
-                        <p className="font-bold text-brand-navy">{user.bank_account_name || 'Not set'}</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                    <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-navy"><Banknote size={14} className="text-emerald-600" /> Virtual Account (Wallet Funding)</h2>
-                    <div className="flex items-center gap-2">
-                        {!user.virtual_account_number && (
-                            <button
-                                onClick={async () => {
-                                    const accountNumber = prompt('Enter account number:');
-                                    if (!accountNumber) return;
-                                    const bankName = prompt('Enter bank name:');
-                                    if (!bankName) return;
-                                    const accountName = prompt('Enter account name:');
-                                    if (!accountName) return;
-                                    
-                                    try {
-                                        const res = await fetch(`/api/admin/users/${id}/manual-provision`, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ accountNumber, bankName, accountName }),
-                                        });
-                                        const json = await res.json();
-                                        if (!res.ok) throw new Error(json.error || 'Failed to provision');
-                                        notifySuccess(showToast, 'Virtual account provisioned successfully');
-                                        await loadUser();
-                                    } catch (err) {
-                                        notifyError(showToast, err, 'Failed to provision account');
-                                    }
-                                }}
-                                className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                            >
-                                Manual Provision
-                            </button>
-                        )}
-                        {user.virtual_account_number && (
-                            <button
-                                onClick={async () => {
-                                    if (!confirm('Clear virtual account data? User will need to re-provision.')) return;
-                                    try {
-                                        const res = await fetch(`/api/admin/users/${id}/clear-virtual-account`, { method: 'POST' });
-                                        const json = await res.json();
-                                        if (!res.ok) throw new Error(json.error || 'Failed to clear virtual account');
-                                        notifySuccess(showToast, 'Virtual account cleared successfully');
-                                        await loadUser();
-                                    } catch (err) {
-                                        notifyError(showToast, err, 'Failed to clear virtual account');
-                                    }
-                                }}
-                                className="text-xs font-semibold text-red-600 hover:text-red-700"
-                            >
-                                Clear Account
-                            </button>
-                        )}
-                    </div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Bank</p>
-                        <p className="font-bold text-brand-navy">{user.virtual_account_bank || 'Not provisioned'}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Account Number</p>
-                        <p className="font-bold text-brand-navy">{user.virtual_account_number || 'Not provisioned'}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs text-brand-gray">Account Name</p>
-                        <p className="font-bold text-brand-navy">{user.virtual_account_name || 'Not provisioned'}</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                    <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-navy">Savings plans</h2>
-                    <span className="text-xs text-brand-gray">{savingsPlans.length} total</span>
-                </div>
-
-                {savingsPlans.length === 0 ? (
-                    <p className="text-sm text-brand-gray">No target or general savings plans found for this user.</p>
-                ) : (
-                    <div className="space-y-2">
-                        {savingsPlans.map((plan) => (
-                            <div key={plan.id} className="rounded-xl border border-slate-200/70 bg-gradient-to-r from-white to-slate-50 p-3 shadow-sm">
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <div>
-                                        <p className="text-sm font-semibold text-brand-navy">{plan.name}</p>
-                                        <p className="mt-1 text-xs text-brand-gray capitalize">
-                                            {plan.planType} · {plan.frequency} · {plan.status}
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-xs text-brand-gray">Saved</p>
-                                        <p className="text-sm font-bold text-brand-navy">NGN {Number(plan.totalSaved).toLocaleString('en-NG')}</p>
-                                    </div>
-                                </div>
-
-                                <div className="mt-2 grid gap-2 sm:grid-cols-5 text-xs">
-                                    <div className="rounded-lg bg-slate-100 px-2 py-1.5">
-                                        <p className="text-brand-gray">Paid</p>
-                                        <p className="font-semibold text-brand-navy">{plan.successfulCount}</p>
-                                    </div>
-                                    <div className="rounded-lg bg-amber-50 px-2 py-1.5">
-                                        <p className="text-brand-gray">Missed</p>
-                                        <p className="font-semibold text-amber-700">{plan.missedCount}</p>
-                                    </div>
-                                    <div className="rounded-lg bg-rose-50 px-2 py-1.5">
-                                        <p className="text-brand-gray">Skipped</p>
-                                        <p className="font-semibold text-rose-700">{plan.skippedCount}</p>
-                                    </div>
-                                    <div className="rounded-lg bg-blue-50 px-2 py-1.5">
-                                        <p className="text-brand-gray">Pending</p>
-                                        <p className="font-semibold text-blue-700">{plan.pendingCount}</p>
-                                    </div>
-                                    <div className="rounded-lg bg-emerald-50 px-2 py-1.5">
-                                        <p className="text-brand-gray">{plan.planType === 'target' ? 'Target' : 'Minimum'}</p>
-                                        <p className="font-semibold text-emerald-700">
-                                            NGN {Number(plan.planType === 'target' ? plan.targetAmount ?? 0 : plan.minimumAmount ?? 0).toLocaleString('en-NG')}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                    <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-navy"><Activity size={14} className="text-emerald-600" /> Recent activity</h2>
-                    {recentActivity.length > 3 && (
-                        <Link 
-                            href={`/admin/users/${id}/activity`}
-                            className="text-xs font-semibold text-brand-navy hover:text-blue-600 transition-colors"
-                        >
-                            Show all ({recentActivity.length})
-                        </Link>
-                    )}
-                </div>
-
-                {recentActivity.length === 0 ? (
-                    <p className="text-sm text-brand-gray">No recent activity recorded for this user.</p>
-                ) : (
-                    <div className="space-y-2">
-                        {recentActivity.slice(0, 3).map((item) => (
-                            <div key={item.id} className="rounded-xl border border-slate-200/70 bg-gradient-to-r from-white to-slate-50 p-3 shadow-sm transition hover:border-slate-300 hover:shadow">
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <div>
-                                        <p className="text-sm font-semibold text-brand-navy">{item.title}</p>
-                                        <p className="mt-1 text-xs text-brand-gray">{item.description}</p>
-                                        <p className="mt-1 text-xs text-brand-gray">{new Date(item.occurredAt).toLocaleString('en-NG')}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-gray">{item.type.replace('_', ' ')}</p>
-                                        <p className="mt-1 text-xs font-semibold capitalize text-brand-navy">{item.status}</p>
-                                        {item.amount !== null ? (
-                                            <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-700"><Banknote size={12} /> NGN {Number(item.amount).toLocaleString('en-NG')}</p>
-                                        ) : null}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {recentActivity.length > 3 && (
-                            <Link
-                                href={`/admin/users/${id}/activity`}
-                                className="block rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs font-semibold text-brand-navy hover:border-brand-navy hover:bg-slate-100 transition-all"
-                            >
-                                View all {recentActivity.length} activities →
-                            </Link>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* NEW: User Account Management Actions */}
-            <UserAccountActions
-                userId={user.id}
-                userName={user.name}
-                userStatus={user.status as 'active' | 'suspended'}
-                userEmail={user.email}
-                walletBalance={Number(user.wallet_balance)}
-                isAccountLocked={user.account_locked || false}
-                activeFlags={activeFlags}
-                onActionComplete={loadUser}
-            />
-
-            {/* NEW: Admin Notes and Flags */}
-            {currentAdminId && (
-                <UserNotesAndFlagsSection
-                    userId={user.id}
-                    currentAdminId={currentAdminId}
-                />
-            )}
-
-            {confirmAction && (
-                <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 px-4">
-                    <div className="w-full max-w-md rounded-3xl border border-red-200 bg-white p-6 shadow-2xl shadow-slate-900/20">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-red-600">Confirm action</p>
-                                <h2 className="mt-2 text-xl font-semibold text-brand-navy">
-                                    {confirmAction.type === 'role'
-                                        ? `Change role to ${confirmAction.nextValue}?`
-                                        : `Change status to ${confirmAction.nextValue}?`}
-                                </h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setConfirmAction(null)}
-                                className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-
-                        <p className="mt-4 text-sm leading-relaxed text-slate-600">
-                            This admin action will be recorded in the audit log and applied immediately.
-                        </p>
-
-                        <div className="mt-5 flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setConfirmAction(null)}
-                                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-navy hover:bg-slate-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => void executeConfirmedAction()}
-                                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-                            >
-                                <TriangleAlert size={14} />
-                                {saving ? 'Applying...' : 'Confirm'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+  const loadUser = useCallback(async () => {
+    const res = await fetch(`/api/admin/users/${id}`, { cache: 'no-store' });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load user.');
+    setUser(json.data as UserDetail);
+    setSavingsPlans(Array.isArray(json.savingsPlans) ? (json.savingsPlans as SavingsPlan[]) : []);
+    setRecentActivity(
+      Array.isArray(json.recentActivity) ? (json.recentActivity as UserActivity[]) : [],
     );
+
+    try {
+      const flagsRes = await fetch(`/api/admin/users/${id}/flags?active=true`, { cache: 'no-store' });
+      const flagsJson = await flagsRes.json();
+      if (flagsRes.ok && flagsJson.data?.activeFlags) {
+        setActiveFlags(flagsJson.data.activeFlags);
+      }
+    } catch (err) {
+      console.error('Failed to load flags:', err);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    const run = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        await loadUser();
+        const { createBrowserClient } = await import('@supabase/ssr');
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        );
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+        if (authUser?.id) setCurrentAdminId(authUser.id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to load user.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void run();
+  }, [id, loadUser]);
+
+  useRefreshOnFocus(() => {
+    void loadUser();
+  });
+
+  const patchUser = async (updates: Record<string, unknown>) => {
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to update user.');
+      notifySuccess(showToast, 'User updated successfully.');
+      await loadUser();
+    } catch (err) {
+      notifyError(showToast, err, 'Unable to update user.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const executeConfirmedAction = async () => {
+    if (!confirmAction) return;
+    if (confirmAction.type === 'role') {
+      await patchUser({ role: confirmAction.nextValue });
+    } else {
+      await patchUser({ status: confirmAction.nextValue });
+    }
+    setConfirmAction(null);
+  };
+
+  const provisionVa = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${id}/manual-provision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vaForm),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to provision');
+      notifySuccess(showToast, 'Virtual account provisioned.');
+      setVaModal(null);
+      setVaForm({ accountNumber: '', bankName: '', accountName: '' });
+      await loadUser();
+    } catch (err) {
+      notifyError(showToast, err, 'Failed to provision account');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clearVa = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${id}/clear-virtual-account`, { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to clear virtual account');
+      notifySuccess(showToast, 'Virtual account cleared.');
+      setVaModal(null);
+      await loadUser();
+    } catch (err) {
+      notifyError(showToast, err, 'Failed to clear virtual account');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      notifyError(showToast, new Error('Copy failed'), 'Could not copy.');
+    }
+  };
+
+  if (loading) return <UserDetailSkeleton />;
+  if (!user) return <div className="text-sm text-red-600">User not found.</div>;
+
+  const displayName = user.name || user.email;
+  const tabs: { id: TabId; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'money', label: 'Money' },
+    { id: 'risk', label: 'Risk' },
+  ];
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4">
+      <Link
+        href="/admin/users"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-gray hover:text-brand-navy"
+      >
+        <ArrowLeft size={14} /> Users
+      </Link>
+
+      {/* Compact header */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex items-start gap-3">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-primary text-sm font-bold text-white">
+            {initials(displayName)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h1 className="truncate text-lg font-bold text-brand-navy">{displayName}</h1>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                  user.status === 'active'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-red-50 text-red-600'
+                }`}
+              >
+                {user.status}
+              </span>
+              {user.account_locked && (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
+                  Locked
+                </span>
+              )}
+              {user.role === 'admin' && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
+                  Admin
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 truncate text-xs text-slate-500">
+              {user.email}
+              {user.phone ? ` · ${user.phone}` : ''}
+            </p>
+            {user.status === 'suspended' && user.suspension_reason && (
+              <p className="mt-1 text-xs text-red-600">{user.suspension_reason}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {[
+            { label: 'Wallet', value: money(user.wallet_balance) },
+            { label: 'Saved', value: money(user.total_contributed) },
+            { label: 'Received', value: money(user.total_received) },
+          ].map((m) => (
+            <div key={m.label} className="rounded-xl bg-slate-50 px-2.5 py-2 text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                {m.label}
+              </p>
+              <p className="truncate text-sm font-bold text-brand-navy">{m.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Icon quick actions */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() =>
+              setConfirmAction({
+                type: 'role',
+                nextValue: user.role === 'admin' ? 'user' : 'admin',
+              })
+            }
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-brand-navy hover:bg-slate-50 disabled:opacity-50"
+            title={user.role === 'admin' ? 'Make user' : 'Make admin'}
+          >
+            <UserCog size={14} />
+            {user.role === 'admin' ? 'Make user' : 'Make admin'}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() =>
+              setConfirmAction({
+                type: 'status',
+                nextValue: user.status === 'active' ? 'suspended' : 'active',
+              })
+            }
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-brand-navy hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Shield size={14} />
+            {user.status === 'active' ? 'Suspend' : 'Activate'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('money')}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-brand-navy hover:bg-slate-50"
+          >
+            <Wallet size={14} /> Wallet tools
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('risk')}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-brand-navy hover:bg-slate-50"
+          >
+            <Shield size={14} /> Security
+          </button>
+        </div>
+
+        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition ${
+              tab === t.id
+                ? 'bg-white text-brand-navy shadow-sm'
+                : 'text-slate-500 hover:text-brand-navy'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2">
+            <InfoRow label="Role" value={<span className="capitalize">{user.role}</span>} />
+            <InfoRow label="KYC" value={`Level ${user.kyc_level}`} />
+            <InfoRow
+              label="Joined"
+              value={user.created_at ? new Date(user.created_at).toLocaleDateString('en-NG') : 'N/A'}
+            />
+            <InfoRow
+              label="Updated"
+              value={user.updated_at ? new Date(user.updated_at).toLocaleDateString('en-NG') : 'N/A'}
+            />
+            {user.marketer ? (
+              <InfoRow
+                label="Marketer"
+                value={
+                  <Link
+                    href={`/admin/marketers/${user.marketer.id}`}
+                    className="text-brand-primary hover:underline"
+                  >
+                    {user.marketer.name} · {user.marketer.referral_code}
+                  </Link>
+                }
+              />
+            ) : user.referral_code_used ? (
+              <InfoRow
+                label="Referral"
+                value={
+                  <span>
+                    {user.referral_code_used}{' '}
+                    <span className="font-normal text-amber-600">(pending passbook)</span>
+                  </span>
+                }
+              />
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-navy">
+                <Activity size={14} className="text-emerald-600" /> Recent activity
+              </h2>
+              {recentActivity.length > 3 && (
+                <Link
+                  href={`/admin/users/${id}/activity`}
+                  className="text-xs font-semibold text-brand-primary"
+                >
+                  All ({recentActivity.length})
+                </Link>
+              )}
+            </div>
+            {recentActivity.length === 0 ? (
+              <p className="text-sm text-slate-400">No recent activity.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {recentActivity.slice(0, 4).map((item) => (
+                  <li key={item.id} className="flex items-start justify-between gap-2 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-brand-navy">{item.title}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {new Date(item.occurredAt).toLocaleString('en-NG')} · {item.status}
+                      </p>
+                    </div>
+                    {item.amount !== null && (
+                      <span className="shrink-0 text-xs font-bold text-emerald-700">
+                        {money(item.amount)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'money' && (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-navy">
+                <Banknote size={14} className="text-emerald-600" /> Virtual account
+              </h2>
+              {!user.virtual_account_number ? (
+                <button
+                  type="button"
+                  onClick={() => setVaModal('provision')}
+                  className="inline-flex items-center gap-1 rounded-lg bg-brand-navy px-2.5 py-1.5 text-[11px] font-bold text-white"
+                >
+                  <Plus size={12} /> Provision
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setVaModal('clear')}
+                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-[11px] font-bold text-red-600"
+                >
+                  <Trash2 size={12} /> Clear
+                </button>
+              )}
+            </div>
+            {user.virtual_account_number ? (
+              <div>
+                <InfoRow label="Bank" value={user.virtual_account_bank || '—'} />
+                <InfoRow
+                  label="Number"
+                  value={
+                    <button
+                      type="button"
+                      onClick={() => void copyText(user.virtual_account_number!)}
+                      className="inline-flex items-center gap-1 hover:text-brand-primary"
+                    >
+                      {user.virtual_account_number}
+                      {copied ? <Check size={12} /> : <Copy size={12} />}
+                    </button>
+                  }
+                />
+                <InfoRow label="Name" value={user.virtual_account_name || '—'} />
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">Not provisioned yet.</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h2 className="mb-2 inline-flex items-center gap-1.5 text-sm font-bold text-brand-navy">
+              <Landmark size={14} className="text-indigo-600" /> Payout bank
+            </h2>
+            <InfoRow label="Bank" value={user.bank_name || 'Not set'} />
+            <InfoRow label="Account" value={user.bank_account || 'Not set'} />
+            <InfoRow label="Name" value={user.bank_account_name || 'Not set'} />
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-brand-navy">Savings plans</h2>
+              <span className="text-xs text-slate-400">{savingsPlans.length}</span>
+            </div>
+            {savingsPlans.length === 0 ? (
+              <p className="text-sm text-slate-400">No plans.</p>
+            ) : (
+              <ul className="space-y-2">
+                {savingsPlans.map((plan) => (
+                  <li
+                    key={plan.id}
+                    className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-brand-navy">{plan.name}</p>
+                        <p className="text-[11px] capitalize text-slate-500">
+                          {plan.planType} · {plan.frequency} · {plan.status}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-sm font-bold text-brand-navy">
+                        {money(plan.totalSaved)}
+                      </p>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                      <span className="rounded-md bg-white px-1.5 py-0.5 text-slate-600">
+                        Paid {plan.successfulCount}
+                      </span>
+                      <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                        Missed {plan.missedCount}
+                      </span>
+                      <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-blue-700">
+                        Pending {plan.pendingCount}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <p className="text-center text-xs text-slate-400">
+            Credit/debit wallet and security tools are under{' '}
+            <button
+              type="button"
+              onClick={() => setTab('risk')}
+              className="font-semibold text-brand-primary hover:underline"
+            >
+              Risk
+            </button>
+            .
+          </p>
+        </div>
+      )}
+
+      {tab === 'risk' && (
+        <div className="space-y-3">
+          <UserAccountActions
+            userId={user.id}
+            userName={user.name}
+            userStatus={user.status as 'active' | 'suspended'}
+            userEmail={user.email}
+            walletBalance={Number(user.wallet_balance)}
+            isAccountLocked={user.account_locked || false}
+            activeFlags={activeFlags}
+            onActionComplete={loadUser}
+          />
+          {currentAdminId && (
+            <UserNotesAndFlagsSection userId={user.id} currentAdminId={currentAdminId} />
+          )}
+        </div>
+      )}
+
+      {/* Role / status confirm */}
+      <AdminActionModal
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={async () => {
+          await executeConfirmedAction();
+        }}
+        title={
+          confirmAction?.type === 'role'
+            ? `Change role to ${confirmAction.nextValue}?`
+            : `Change status to ${confirmAction?.nextValue}?`
+        }
+        description="This admin action is recorded in the audit log and applied immediately."
+        confirmLabel="Confirm"
+        severity={confirmAction?.type === 'status' && confirmAction.nextValue === 'suspended' ? 'danger' : 'warning'}
+        icon={confirmAction?.type === 'role' ? UserCog : Shield}
+        isLoading={saving}
+      />
+
+      {/* VA provision modal */}
+      <Modal
+        isOpen={vaModal === 'provision'}
+        onClose={() => setVaModal(null)}
+        title="Provision virtual account"
+        subtitle="Enter bank details manually (bypasses Monicredit)."
+        size="sm"
+      >
+        <div className="space-y-3">
+          {(
+            [
+              ['accountNumber', 'Account number'],
+              ['bankName', 'Bank name'],
+              ['accountName', 'Account name'],
+            ] as const
+          ).map(([key, label]) => (
+            <label key={key} className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-600">{label}</span>
+              <input
+                value={vaForm[key]}
+                onChange={(e) => setVaForm((f) => ({ ...f, [key]: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+          ))}
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setVaModal(null)}
+              className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={
+                saving ||
+                !vaForm.accountNumber.trim() ||
+                !vaForm.bankName.trim() ||
+                !vaForm.accountName.trim()
+              }
+              onClick={() => void provisionVa()}
+              className="flex-1 rounded-xl bg-brand-navy py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Provision'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <AdminActionModal
+        isOpen={vaModal === 'clear'}
+        onClose={() => setVaModal(null)}
+        onConfirm={async () => {
+          await clearVa();
+        }}
+        title="Clear virtual account?"
+        description="User will need to re-provision before they can fund via transfer again."
+        confirmLabel="Clear account"
+        severity="danger"
+        icon={Trash2}
+        isLoading={saving}
+      />
+    </div>
+  );
 }

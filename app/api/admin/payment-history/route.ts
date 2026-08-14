@@ -4,94 +4,81 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
  * GET /api/admin/payment-history
- * 
- * Returns all completed payouts (users who have been paid)
+ * Completed savings (passbook) payouts to users.
  */
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const auth = await requireAdmin();
     if (auth.error) return auth.error;
 
     const adminClient = createSupabaseAdminClient();
 
-    // Get all payment records with type 'payout' and status 'success'
-    const { data: paymentRecords, error: recordsError } = await adminClient
-      .from('payment_records')
-      .select('id, user_id, group_id, amount, reference, created_at, metadata, profiles:user_id!inner(id, name, email, phone, bank_account, bank_name), groups:group_id(id, name)')
-      .eq('type', 'payout')
-      .eq('status', 'success')
-      .order('created_at', { ascending: false });
-
-    if (recordsError) {
-      return NextResponse.json({ error: recordsError.message }, { status: 400 });
-    }
-
-    // Also get passbook payouts for a complete view
     const { data: passbookPayouts, error: payoutsError } = await adminClient
-      .from('passbook_payouts')
-      .select('id, user_id, scheme_id, amount, period_label, paid_at, created_at, profiles:user_id!inner(id, name, email, phone, bank_account, bank_name), schemes:scheme_id(id, name)')
-      .order('created_at', { ascending: false });
+      .from("passbook_payouts")
+      .select(
+        "id, user_id, scheme_id, amount, period_label, paid_at, created_at, notes, profiles:user_id!inner(id, name, email, phone, bank_account, bank_name), schemes:scheme_id(id, name)",
+      )
+      .order("created_at", { ascending: false });
 
     if (payoutsError) {
       return NextResponse.json({ error: payoutsError.message }, { status: 400 });
     }
 
-    // Type definitions for the joined data
-    type PaymentRecordWithProfile = {
+    type PassbookRow = {
       id: string;
       user_id: string;
-      group_id: string | null;
       amount: number;
-      reference: string;
+      period_label: string | null;
+      paid_at: string | null;
       created_at: string;
-      metadata: any;
-      profiles: { id: string; name: string; email: string; phone: string | null; bank_account: string | null; bank_name: string | null } | null;
-      groups: { id: string; name: string } | null;
+      notes: string | null;
+      profiles: {
+        id: string;
+        name: string;
+        email: string;
+        phone: string | null;
+        bank_account: string | null;
+        bank_name: string | null;
+      } | null;
+      schemes: { id: string; name: string } | null;
     };
 
-    const typedRecords = (paymentRecords || []) as unknown as PaymentRecordWithProfile[];
-
-    // Combine and format the data
-    const paymentHistory = typedRecords.map(record => ({
-      id: record.id,
-      type: record.metadata?.payout_type || (record.group_id ? 'group_payout' : 'savings_withdrawal'),
-      user: {
-        id: record.profiles?.id || record.user_id,
-        name: record.profiles?.name || 'Unknown',
-        email: record.profiles?.email || 'No email',
-        phone: record.profiles?.phone || null,
-        bank_account: record.profiles?.bank_account || null,
-        bank_name: record.profiles?.bank_name || null,
+    const rows = (passbookPayouts ?? []) as unknown as PassbookRow[];
+    const payments = rows.map((p) => ({
+      id: p.id,
+      type: "savings_withdrawal",
+      user: p.profiles ?? {
+        id: p.user_id,
+        name: "Unknown",
+        email: "",
+        phone: null,
+        bank_account: null,
+        bank_name: null,
       },
-      group_or_scheme: record.groups?.name || record.metadata?.scheme_id || 'General Savings',
-      amount: record.amount,
-      reference: record.reference,
-      period: record.metadata?.period_label || record.metadata?.cycle_number || null,
-      paid_at: record.created_at,
-      notes: record.metadata?.notes || null,
+      group_or_scheme: p.schemes?.name ?? "Savings",
+      amount: Number(p.amount ?? 0),
+      reference: p.id,
+      period: p.period_label,
+      paid_at: p.paid_at ?? p.created_at,
+      notes: p.notes,
     }));
 
-    // Get totals
-    const totalPaidOut = paymentHistory.reduce((sum, p) => sum + Number(p.amount), 0);
-    const uniqueUsers = new Set(paymentHistory.map(p => p.user.id)).size;
-    const savingsPayouts = paymentHistory.filter(p => p.type === 'savings_withdrawal').length;
-    const groupPayouts = paymentHistory.filter(p => p.type === 'group_payout').length;
+    const uniqueUsers = new Set(payments.map((p) => p.user.id)).size;
+    const totalPaidOut = payments.reduce((sum, p) => sum + p.amount, 0);
 
     return NextResponse.json({
       data: {
-        payments: paymentHistory,
+        payments,
         summary: {
           totalPaidOut,
-          totalPayments: paymentHistory.length,
+          totalPayments: payments.length,
           uniqueUsers,
-          savingsPayouts,
-          groupPayouts,
+          savingsPayouts: payments.length,
+          groupPayouts: 0,
         },
       },
     });
-
   } catch (error) {
-    console.error('[payment-history] Unexpected error:', error);
     return serverErrorResponse(error);
   }
 }

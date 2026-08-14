@@ -1,82 +1,14 @@
 ﻿'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronRight, Copy, ExternalLink, Loader2, Upload, X, Calendar, CreditCard } from 'lucide-react';
-import { DateRangeSelector, DateRangeValue } from '@/components/admin/DateRangeSelector';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Loader2, X, Calendar, CreditCard } from 'lucide-react';
 import { LastSynced } from '@/components/admin/LastSynced';
-import { ChartCard } from '@/components/admin/charts/ChartCard';
-import { AdminBarChart } from '@/components/admin/charts/BarChart';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { useToast } from '@/components/ui/Toast';
 import { notifyError, notifySuccess } from '@/lib/toast';
-import { formatScheduleDate, getDefaultPayoutDate, getDueWindow, getEffectivePayoutDate } from '@/lib/ajo-schedule';
-
-const PAYOUTS_REALTIME_TABLES = ['payouts', 'profiles'];
-
-const ALLOWED_PROOF_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
-const MAX_PROOF_SIZE = 5 * 1024 * 1024; // 5 MB
-
-type PayoutRow = {
-  id: string;
-  status: string;
-  amount: number;
-  cycle_number: number;
-  bank_account: string;
-  bank_name: string;
-  scheduled_for?: string | null;
-  proof_url?: string | null;
-  proof_note?: string | null;
-  proof_uploaded_at?: string | null;
-  approved_at?: string | null;
-  created_at: string;
-  groups?: {
-    id: string;
-    name: string;
-    start_date?: string | null;
-    frequency?: string;
-    current_cycle?: number;
-  } | null;
-  profiles?: {
-    id: string;
-    name: string;
-    email: string;
-    phone?: string | null;
-    bank_account?: string | null;
-    bank_name?: string | null;
-  } | null;
-};
 
 function toCurrency(value: number) {
   return `NGN ${Number(value).toLocaleString('en-NG')}`;
-}
-
-function statusBadgeClass(status: string) {
-  if (status === 'done') return 'bg-emerald-100 text-emerald-700';
-  if (status === 'processing') return 'bg-blue-100 text-blue-700';
-  if (status === 'failed') return 'bg-red-100 text-red-700';
-  return 'bg-amber-100 text-amber-700';
-}
-
-function AdminPayoutsSkeleton() {
-  return (
-    <div className="space-y-5 animate-pulse">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="h-7 w-44 rounded bg-slate-200" />
-          <div className="h-3 w-28 rounded bg-slate-200" />
-        </div>
-        <div className="h-9 w-40 rounded-xl bg-slate-200" />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {Array.from({ length: 3 }, (_, idx) => (
-          <div key={idx} className="rounded-xl border border-slate-100 bg-white p-4 h-20" />
-        ))}
-      </div>
-      <div className="rounded-xl border border-slate-100 bg-white p-4 h-56" />
-      <div className="rounded-xl border border-slate-100 bg-white p-3 h-16" />
-      <div className="rounded-xl border border-slate-100 bg-white p-3 h-80" />
-    </div>
-  );
 }
 
 // ── Payment History ───────────────────────────────────────────────────────────
@@ -161,8 +93,8 @@ function PaymentHistoryTab() {
           <p className="text-xl font-bold text-blue-700">{summary.uniqueUsers}</p>
         </div>
         <div className="rounded-xl border border-slate-100 bg-white p-4">
-          <p className="text-xs text-brand-gray">Savings vs Group</p>
-          <p className="text-sm font-bold text-slate-600">{summary.savingsPayouts} / {summary.groupPayouts}</p>
+          <p className="text-xs text-brand-gray">Savings payouts</p>
+          <p className="text-xl font-bold text-slate-600">{summary.savingsPayouts}</p>
         </div>
       </div>
 
@@ -185,7 +117,7 @@ function PaymentHistoryTab() {
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="text-left py-3 px-4 font-semibold text-slate-600">Date</th>
                 <th className="text-left py-3 px-4 font-semibold text-slate-600">User</th>
-                <th className="text-left py-3 px-4 font-semibold text-slate-600">Plan / Group</th>
+                <th className="text-left py-3 px-4 font-semibold text-slate-600">Plan</th>
                 <th className="text-left py-3 px-4 font-semibold text-slate-600">Period</th>
                 <th className="text-right py-3 px-4 font-semibold text-slate-600">Amount</th>
                 <th className="text-left py-3 px-4 font-semibold text-slate-600">Bank Details</th>
@@ -213,8 +145,8 @@ function PaymentHistoryTab() {
                   </td>
                   <td className="py-3 px-4">
                     <p className="font-medium text-slate-700">{payment.group_or_scheme}</p>
-                    <span className={`inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${payment.type === 'savings_withdrawal' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {payment.type === 'savings_withdrawal' ? 'Savings' : 'Group'}
+                    <span className="inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                      Savings
                     </span>
                   </td>
                   <td className="py-3 px-4">
@@ -499,20 +431,10 @@ function SavingsScheduleTab() {
 
 export default function AdminPayoutsPage() {
   const [activeTab, setActiveTab] = useState<'schedule' | 'history'>('schedule');
-  const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState('');
-  const [error, setError] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [range, setRange] = useState<DateRangeValue>('30');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [payouts, setPayouts] = useState<PayoutRow[]>([]);
-  const [payoutDateDrafts, setPayoutDateDrafts] = useState<Record<string, string>>({});
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [proofFiles, setProofFiles] = useState<Record<string, { file: File | null; note: string; uploading: boolean }>>({});
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null); const [viewingProofId, setViewingProofId] = useState<string | null>(null); const { showToast } = useToast();
-  const { refreshTrigger, lastEvent } = useRealtimeSubscription({
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const { lastEvent } = useRealtimeSubscription({
     channelName: 'admin-payouts-live',
-    tables: PAYOUTS_REALTIME_TABLES,
+    tables: ['passbook_payouts', 'profiles', 'savings_schemes'],
   });
 
   useEffect(() => {
@@ -521,240 +443,10 @@ export default function AdminPayoutsPage() {
     }
   }, [lastEvent]);
 
-  const loadPayouts = useCallback(async () => {
-    const res = await fetch('/api/admin/payouts', { cache: 'no-store' });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to load payouts.');
-    const nextPayouts = Array.isArray(json.data) ? json.data as PayoutRow[] : [];
-    setPayouts(nextPayouts);
-    setPayoutDateDrafts(
-      Object.fromEntries(
-        nextPayouts.map((payout) => [
-          payout.id,
-          payout.scheduled_for ?? getDefaultPayoutDate(payout.groups?.start_date ?? null, payout.groups?.frequency ?? '', payout.cycle_number) ?? '',
-        ]),
-      ),
-    );
-    setProofFiles(
-      Object.fromEntries(
-        nextPayouts.map((payout) => [
-          payout.id,
-          { file: null, note: payout.proof_note ?? '', uploading: false },
-        ]),
-      ),
-    );
-    setLastSyncedAt(new Date().toISOString());
-  }, []);
-
-  useEffect(() => {
-    const run = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        await loadPayouts();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unable to load payouts.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    void run();
-  }, [loadPayouts, refreshTrigger]);
-
-  const filtered = useMemo(() => {
-    const now = Date.now();
-    const days = Number(range);
-
-    return payouts.filter((payout) => {
-      if (statusFilter !== 'all' && payout.status !== statusFilter) return false;
-      if (range !== 'all' && Number.isFinite(days)) {
-        const diff = now - new Date(payout.created_at).getTime();
-        if (diff > days * 24 * 60 * 60 * 1000) return false;
-      }
-      return true;
-    });
-  }, [payouts, statusFilter, range]);
-
-  const totalPaidOut = filtered
-    .filter((payout) => payout.status === 'done')
-    .reduce((sum, payout) => sum + Number(payout.amount ?? 0), 0);
-
-  const pendingAmount = filtered
-    .filter((payout) => payout.status === 'pending')
-    .reduce((sum, payout) => sum + Number(payout.amount ?? 0), 0);
-
-  const processingCount = filtered.filter((payout) => payout.status === 'processing').length;
-
-  const timelineMap = new Map<string, { label: string; value: number }>();
-  for (const payout of filtered) {
-    const key = payout.created_at.slice(0, 10);
-    const found = timelineMap.get(key);
-    if (found) {
-      found.value += Number(payout.amount ?? 0);
-    } else {
-      timelineMap.set(key, { label: key.slice(5), value: Number(payout.amount ?? 0) });
-    }
-  }
-
-  const timelineData = Array.from(timelineMap.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, value]) => value);
-
-  const updatePayoutStatus = useCallback(async (payoutId: string, nextStatus: 'processing' | 'done') => {
-    setSavingId(payoutId);
-    setError('');
-
-    try {
-      const res = await fetch('/api/admin/payouts', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payoutId, status: nextStatus }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to update payout status.');
-      notifySuccess(showToast, nextStatus === 'processing' ? 'Payout approved.' : 'Payout marked as done.');
-      await loadPayouts();
-    } catch (err) {
-      notifyError(showToast, err, 'Unable to update payout.');
-    } finally {
-      setSavingId('');
-    }
-  }, [loadPayouts, showToast]);
-
-  const savePayoutDate = useCallback(async (payoutId: string) => {
-    const scheduledFor = payoutDateDrafts[payoutId] ?? '';
-
-    setSavingId(`date:${payoutId}`);
-    setError('');
-
-    try {
-      const res = await fetch('/api/admin/payouts', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payoutId, scheduledFor }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to update payout date.');
-      notifySuccess(showToast, 'Payout date updated.');
-      await loadPayouts();
-    } catch (err) {
-      notifyError(showToast, err, 'Unable to update payout date.');
-    } finally {
-      setSavingId('');
-    }
-  }, [loadPayouts, payoutDateDrafts, showToast]);
-
-  const uploadProofFile = useCallback(async (payoutId: string) => {
-    const state = proofFiles[payoutId] ?? { file: null, note: '', uploading: false };
-    if (!state.file) return;
-
-    setProofFiles((prev) => ({ ...prev, [payoutId]: { ...state, uploading: true } }));
-    setError('');
-
-    try {
-      const formData = new FormData();
-      formData.append('file', state.file);
-      formData.append('payoutId', payoutId);
-      formData.append('proofNote', state.note);
-
-      const res = await fetch('/api/admin/payouts/upload', { method: 'POST', body: formData });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to upload proof.');
-      notifySuccess(showToast, 'Proof uploaded successfully.');
-      setProofFiles((prev) => ({ ...prev, [payoutId]: { file: null, note: '', uploading: false } }));
-      await loadPayouts();
-    } catch (err) {
-      notifyError(showToast, err, 'Unable to upload proof.');
-      setProofFiles((prev) => ({ ...prev, [payoutId]: { ...state, uploading: false } }));
-    }
-  }, [loadPayouts, proofFiles, showToast]);
-
-  const runBatchMarkDone = async () => {
-    if (selectedIds.length === 0) return;
-
-    setSavingId('batch');
-    setError('');
-
-    try {
-      const results = await Promise.allSettled(
-        selectedIds.map(async (payoutId) => {
-          const res = await fetch('/api/admin/payouts', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ payoutId, status: 'done' }),
-          });
-          const json = await res.json();
-          if (!res.ok) throw new Error(json.error || 'Failed to update a payout.');
-        }),
-      );
-
-      const successCount = results.filter((result) => result.status === 'fulfilled').length;
-      const failureCount = results.length - successCount;
-
-      setSelectedIds([]);
-      if (failureCount > 0) {
-        notifyError(showToast, new Error(`${failureCount} payout updates failed.`), `${successCount} of ${results.length} payouts marked as done. ${failureCount} failed.`);
-      } else {
-        notifySuccess(showToast, 'Selected payouts marked as done.');
-      }
-      await loadPayouts();
-    } catch (err) {
-      notifyError(showToast, err, 'Unable to complete batch action.');
-    } finally {
-      setSavingId('');
-    }
-  };
-
-  const viewProof = useCallback(async (payoutId: string) => {
-    setViewingProofId(payoutId);
-    try {
-      const res = await fetch(`/api/admin/payouts/proof-url?payoutId=${encodeURIComponent(payoutId)}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Could not generate proof URL.');
-      window.open(json.signedUrl, '_blank', 'noopener,noreferrer');
-    } catch (err) {
-      notifyError(showToast, err, 'Unable to open proof document.');
-    } finally {
-      setViewingProofId(null);
-    }
-  }, [showToast]);
-
-  const copyToClipboard = useCallback(async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      notifySuccess(showToast, 'Copied to clipboard.', { duration: 2200 });
-    } catch (err) {
-      notifyError(showToast, err, 'Could not copy to clipboard in this browser session.');
-    }
-  }, [showToast]);
-
-  const selectableRows = filtered.filter((payout) => payout.status === 'processing' && Boolean(payout.proof_url));
-  const allSelected = selectableRows.length > 0 && selectableRows.every((row) => selectedIds.includes(row.id));
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
-
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !selectableRows.some((row) => row.id === id)));
-      return;
-    }
-
-    const next = new Set(selectedIds);
-    selectableRows.forEach((row) => next.add(row.id));
-    setSelectedIds(Array.from(next));
-  };
-
-  if (loading) return <AdminPayoutsSkeleton />;
-
-  const expandedPayout = expandedId ? filtered.find((p) => p.id === expandedId) ?? null : null;
-
   return (
     <div className="space-y-5">
-      <LastSynced timestamp={lastSyncedAt} loading={loading || savingId !== ''} />
+      <LastSynced timestamp={lastSyncedAt} loading={false} />
 
-      {/* Tab switcher */}
       <div className="flex gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
         <button
           onClick={() => setActiveTab('schedule')}

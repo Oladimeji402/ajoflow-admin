@@ -20,7 +20,7 @@ import { AdminBarChart } from '@/components/admin/charts/BarChart';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { useRefreshOnFocus } from '@/lib/hooks/useRefreshOnFocus';
 
-const OVERVIEW_REALTIME_TABLES = ['contributions', 'payment_records', 'payouts', 'profiles', 'savings_schemes', 'passbook_payouts'];
+const OVERVIEW_REALTIME_TABLES = ['payment_records', 'profiles', 'savings_schemes', 'passbook_payouts'];
 
 type AdminStats = {
   totalUsers: number;
