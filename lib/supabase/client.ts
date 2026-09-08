@@ -17,7 +17,7 @@ function getPublicEnv() {
 
 export function createSupabaseBrowserClient(options: BrowserClientOptions = {}) {
   const { supabaseUrl, supabaseAnonKey } = getPublicEnv();
-  const persistSession = options.persistSession ?? true;
+  const persistSession = options.persistSession ?? false;
 
   return createBrowserClient(supabaseUrl, supabaseAnonKey, {
     auth: typeof window === "undefined"
