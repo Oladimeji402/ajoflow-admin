@@ -76,11 +76,14 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
         tables: LAYOUT_REALTIME_TABLES,
     });
 
-    useEffect(() => {
+    // Auto-expand the Marketers group when navigating into it (adjust state during render).
+    const [prevPathname, setPrevPathname] = useState(pathname);
+    if (prevPathname !== pathname) {
+        setPrevPathname(pathname);
         if (pathname === '/admin/marketers' || pathname.startsWith('/admin/marketers/')) {
             setMarketersOpen(true);
         }
-    }, [pathname]);
+    }
 
     useEffect(() => {
         const loadAdminEmail = async () => {
@@ -95,7 +98,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
             try {
                 const [statsRes, usersRes, supportRes, marketersRes] = await Promise.all([
                     fetch('/api/admin/stats', { cache: 'no-store' }),
-                    fetch('/api/admin/users?page=1&pageSize=500', { cache: 'no-store' }),
+                    fetch('/api/admin/users?page=1&pageSize=1', { cache: 'no-store' }),
                     fetch('/api/admin/support-cases?status=open&page=1&pageSize=1', { cache: 'no-store' }),
                     fetch('/api/admin/marketers', { cache: 'no-store' }),
                 ]);
@@ -106,15 +109,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
                     marketersRes.json(),
                 ]);
                 if (statsRes.ok) setPendingPayoutsCount(Number(statsJson.data?.pendingPayouts ?? 0));
-                if (usersRes.ok && Array.isArray(usersJson.data)) {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const count = usersJson.data.filter((user: { created_at?: string }) => {
-                        if (!user.created_at) return false;
-                        return new Date(user.created_at).getTime() >= today.getTime();
-                    }).length;
-                    setNewUsersTodayCount(count);
-                }
+                if (usersRes.ok) setNewUsersTodayCount(Number(usersJson.stats?.newToday ?? 0));
                 if (supportRes.ok) {
                     const openCount = supportJson.pagination?.total ?? 0;
                     setOpenSupportCasesCount(openCount);

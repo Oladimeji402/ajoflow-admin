@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/api/auth";
+import { parsePagination } from "@/lib/api/pagination";
 import { recordSettlement } from "@/lib/actions/settlement.actions";
 
 /**
@@ -8,40 +9,22 @@ import { recordSettlement } from "@/lib/actions/settlement.actions";
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createSupabaseServerClient();
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-    
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    
-    if (profile?.role !== "admin") {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
-    }
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+    const supabase = auth.supabase;
     
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get("status");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
-    const limit = searchParams.get("limit");
+    const { page, pageSize, from, to } = parsePagination(request.nextUrl);
     
     let query = supabase
       .from("settlements")
-      .select("*")
-      .order("settlement_date", { ascending: false });
+      .select("*", { count: "exact" })
+      .order("settlement_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .range(from, to);
     
     if (status) {
       query = query.eq("status", status);
@@ -55,11 +38,7 @@ export async function GET(request: NextRequest) {
       query = query.lte("settlement_date", endDate);
     }
     
-    if (limit) {
-      query = query.limit(parseInt(limit, 10));
-    }
-    
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     
     if (error) {
       console.error("[GET /api/admin/settlements] Error:", error);
@@ -69,7 +48,10 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    return NextResponse.json({ data });
+    return NextResponse.json({
+      data,
+      pagination: { page, pageSize, total: count ?? 0 },
+    });
   } catch (error) {
     console.error("[GET /api/admin/settlements] Unexpected error:", error);
     return NextResponse.json(
@@ -85,29 +67,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createSupabaseServerClient();
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-    
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    
-    if (profile?.role !== "admin") {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
-    }
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
     
     const body = await request.json();
     

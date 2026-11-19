@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/Toast';
 import { notifyError, notifySuccess } from '@/lib/toast';
 import { buildReferralSignupUrl } from '@/lib/referrals/referral-code';
 import { AdminActionModal } from '@/components/admin/AdminActionModal';
+import { Pagination, ADMIN_PAGE_SIZE } from '@/components/admin/Pagination';
 import { Modal } from '@/components/ui/Modal';
 
 type TabId = 'overview' | 'referrals' | 'tasks';
@@ -94,6 +95,8 @@ export default function AdminMarketerDetailPage() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [counts, setCounts] = useState<ReferralCounts>({ attributed: 0, pending: 0, total: 0 });
   const [statusFilter, setStatusFilter] = useState<'all' | 'attributed' | 'pending'>('all');
+  const [referralPage, setReferralPage] = useState(1);
+  const [referralTotal, setReferralTotal] = useState(0);
   const [passportUrl, setPassportUrl] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [tab, setTab] = useState<TabId>('overview');
@@ -114,7 +117,7 @@ export default function AdminMarketerDetailPage() {
     try {
       const [marketerRes, referralsRes, tasksRes] = await Promise.all([
         fetch(`/api/admin/marketers/${id}`, { cache: 'no-store' }),
-        fetch(`/api/admin/marketers/${id}/referrals?page=1&pageSize=500&status=${statusFilter}`, {
+        fetch(`/api/admin/marketers/${id}/referrals?page=${referralPage}&pageSize=${ADMIN_PAGE_SIZE}&status=${statusFilter}`, {
           cache: 'no-store',
         }),
         fetch(`/api/admin/marketers/${id}/tasks`, { cache: 'no-store' }),
@@ -132,6 +135,7 @@ export default function AdminMarketerDetailPage() {
       const m = marketerJson.data as MarketerDetail;
       setMarketer(m);
       setReferrals(Array.isArray(referralsJson.data) ? referralsJson.data : []);
+      setReferralTotal(Number(referralsJson.pagination?.total ?? 0));
       setTasks(Array.isArray(tasksJson.data) ? tasksJson.data : []);
       setCounts({
         attributed: Number(referralsJson.counts?.attributed ?? 0),
@@ -151,7 +155,7 @@ export default function AdminMarketerDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, showToast, statusFilter]);
+  }, [id, showToast, statusFilter, referralPage]);
 
   useEffect(() => {
     void load();
@@ -431,7 +435,10 @@ export default function AdminMarketerDetailPage() {
                 <button
                   key={filter}
                   type="button"
-                  onClick={() => setStatusFilter(filter)}
+                  onClick={() => {
+                    setStatusFilter(filter);
+                    setReferralPage(1);
+                  }}
                   className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold capitalize ${
                     statusFilter === filter
                       ? 'bg-brand-navy text-white'
@@ -474,6 +481,12 @@ export default function AdminMarketerDetailPage() {
               ))}
             </ul>
           )}
+          <Pagination
+            page={referralPage}
+            total={referralTotal}
+            onPageChange={setReferralPage}
+            className="mt-3 border-t border-slate-100 pt-3"
+          />
         </div>
       )}
 

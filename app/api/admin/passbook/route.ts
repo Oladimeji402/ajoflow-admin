@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/api/auth';
+import { parsePagination, sanitizeSearch } from '@/lib/api/pagination';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/admin/passbook
- * Fetch all users with their passbook activation status
+ * GET /api/admin/passbook?page=&pageSize=&search=&status=all|activated|not_activated
+ * Paginated users with passbook activation status, plus overall stats.
  */
 export async function GET(req: NextRequest) {
   const authResult = await requireAdmin();
@@ -14,47 +15,55 @@ export async function GET(req: NextRequest) {
     return authResult.error!;
   }
 
-  const { searchParams } = new URL(req.url);
-  const page = parseInt(searchParams.get('page') || '1', 10);
-  const pageSize = parseInt(searchParams.get('pageSize') || '50', 10);
+  const url = new URL(req.url);
+  const { page, pageSize, from, to } = parsePagination(url);
+  const search = sanitizeSearch(url.searchParams.get('search'));
+  const status = url.searchParams.get('status') ?? 'all';
 
   const adminSupabase = createSupabaseAdminClient();
 
   try {
-    // Fetch users with passbook status
-    const { data: users, error: usersError } = await adminSupabase
+    let query = adminSupabase
       .from('profiles')
-      .select('id, name, email, phone, passbook_activated, passbook_activated_at, wallet_balance, created_at')
+      .select('id, name, email, phone, passbook_activated, passbook_activated_at, wallet_balance, created_at', {
+        count: 'exact',
+      })
       .order('created_at', { ascending: false })
-      .range((page - 1) * pageSize, page * pageSize - 1);
+      .range(from, to);
+
+    if (status === 'activated') query = query.eq('passbook_activated', true);
+    if (status === 'not_activated') query = query.neq('passbook_activated', true);
+    if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+
+    const [{ data: users, error: usersError, count }, totalRes, activatedRes] = await Promise.all([
+      query,
+      adminSupabase.from('profiles').select('id', { count: 'exact', head: true }),
+      adminSupabase.from('profiles').select('id', { count: 'exact', head: true }).eq('passbook_activated', true),
+    ]);
 
     if (usersError) {
       return NextResponse.json({ error: usersError.message }, { status: 400 });
     }
 
-    // Get total count for pagination
-    const { count, error: countError } = await adminSupabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true });
-
-    if (countError) {
-      return NextResponse.json({ error: countError.message }, { status: 400 });
-    }
+    const totalAll = totalRes.count ?? 0;
+    const activatedAll = activatedRes.count ?? 0;
 
     return NextResponse.json({
       data: users || [],
       pagination: {
         page,
         pageSize,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / pageSize),
+        total: count ?? 0,
+        totalPages: Math.ceil((count ?? 0) / pageSize),
+      },
+      stats: {
+        total: totalAll,
+        activated: activatedAll,
+        notActivated: Math.max(totalAll - activatedAll, 0),
       },
     });
   } catch (error) {
     console.error('Admin passbook fetch error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch passbook data' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch passbook data' }, { status: 500 });
   }
 }

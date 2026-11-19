@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { DataTable, DataTableColumn } from '@/components/admin/DataTable';
+import { Pagination, ADMIN_PAGE_SIZE } from '@/components/admin/Pagination';
 import { LastSynced } from '@/components/admin/LastSynced';
 import { ChartCard } from '@/components/admin/charts/ChartCard';
 import { AdminAreaChart } from '@/components/admin/charts/AreaChart';
@@ -67,6 +68,12 @@ export default function AdminPassbookPage() {
   const [users, setUsers] = useState<PassbookUserRow[]>([]);
   const [activationTrends, setActivationTrends] = useState<ActivationTrend[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ total: 0, activated: 0, notActivated: 0 });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const selectedCache = useRef<Map<string, PassbookUserRow>>(new Map());
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [passbookFee, setPassbookFee] = useState<number>(500);
   const [feeUpdatedAt, setFeeUpdatedAt] = useState<string | null>(null);
@@ -98,9 +105,20 @@ export default function AdminPassbookPage() {
     }
   }, [lastEvent]);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter]);
+
   const loadAll = useCallback(async () => {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(ADMIN_PAGE_SIZE), status: statusFilter });
+    if (debouncedSearch) params.set('search', debouncedSearch);
     const [usersRes, trendsRes, feeRes] = await Promise.all([
-      fetch('/api/admin/passbook?page=1&pageSize=500', { cache: 'no-store' }),
+      fetch(`/api/admin/passbook?${params.toString()}`, { cache: 'no-store' }),
       fetch('/api/admin/passbook/trends?days=90', { cache: 'no-store' }),
       fetch('/api/admin/passbook/fee', { cache: 'no-store' }),
     ]);
@@ -116,15 +134,16 @@ export default function AdminPassbookPage() {
     if (!feeRes.ok) throw new Error(feeJson.error || 'Failed to load passbook fee.');
 
     setUsers(Array.isArray(usersJson.data) ? usersJson.data : []);
+    setTotal(Number(usersJson.pagination?.total ?? 0));
+    if (usersJson.stats) setStats(usersJson.stats);
     setActivationTrends(Array.isArray(trendsJson.data) ? trendsJson.data : []);
     setPassbookFee(Number(feeJson.data?.amount ?? 500));
     setFeeUpdatedAt(feeJson.data?.updatedAt ?? null);
     setLastSyncedAt(new Date().toISOString());
-  }, []);
+  }, [page, debouncedSearch, statusFilter]);
 
   useEffect(() => {
     const run = async () => {
-      setLoading(true);
       setError('');
       try {
         await loadAll();
@@ -132,6 +151,7 @@ export default function AdminPassbookPage() {
         setError(err instanceof Error ? err.message : 'Unable to load passbook data.');
       } finally {
         setLoading(false);
+        setInitialLoaded(true);
       }
     };
 
@@ -142,20 +162,10 @@ export default function AdminPassbookPage() {
     void loadAll();
   });
 
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
-      if (statusFilter === 'activated' && !user.passbook_activated) return false;
-      if (statusFilter === 'not_activated' && user.passbook_activated) return false;
-      if (!search.trim()) return true;
-
-      const haystack = [user.name, user.email, user.phone ?? ''].join(' ').toLowerCase();
-      return haystack.includes(search.toLowerCase());
-    });
-  }, [users, statusFilter, search]);
-
-  const totalUsers = filteredUsers.length;
-  const activatedUsers = filteredUsers.filter((u) => u.passbook_activated).length;
-  const notActivatedUsers = filteredUsers.filter((u) => !u.passbook_activated).length;
+  const filteredUsers = users;
+  const totalUsers = stats.total;
+  const activatedUsers = stats.activated;
+  const notActivatedUsers = stats.notActivated;
   const activationRate = totalUsers > 0 ? ((activatedUsers / totalUsers) * 100).toFixed(1) : '0.0';
 
   const chartData = activationTrends.map((point) => ({
@@ -167,17 +177,29 @@ export default function AdminPassbookPage() {
   const allSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedIds.includes(u.id));
 
   const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) {
+        selectedCache.current.delete(id);
+        return prev.filter((x) => x !== id);
+      }
+      const row = users.find((u) => u.id === id);
+      if (row) selectedCache.current.set(id, row);
+      return [...prev, id];
+    });
   };
 
   const toggleSelectAll = () => {
     if (allSelected) {
+      filteredUsers.forEach((u) => selectedCache.current.delete(u.id));
       setSelectedIds((prev) => prev.filter((id) => !filteredUsers.some((u) => u.id === id)));
       return;
     }
 
     const next = new Set(selectedIds);
-    filteredUsers.forEach((u) => next.add(u.id));
+    filteredUsers.forEach((u) => {
+      next.add(u.id);
+      selectedCache.current.set(u.id, u);
+    });
     setSelectedIds(Array.from(next));
   };
 
@@ -187,7 +209,9 @@ export default function AdminPassbookPage() {
       return;
     }
 
-    const selectedUsers = users.filter(u => selectedIds.includes(u.id));
+    const selectedUsers = selectedIds
+      .map((id) => selectedCache.current.get(id))
+      .filter((u): u is PassbookUserRow => Boolean(u));
     const notActivatedSelected = selectedUsers.filter(u => !u.passbook_activated);
 
     if (notActivatedSelected.length === 0) {
@@ -350,7 +374,7 @@ export default function AdminPassbookPage() {
     [selectedIds],
   );
 
-  if (loading) {
+  if (loading && !initialLoaded) {
     return <AdminPassbookSkeleton />;
   }
 
@@ -456,7 +480,7 @@ export default function AdminPassbookPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white p-3">
           <label className="inline-flex items-center gap-2 px-1 text-xs font-semibold text-slate-600">
             <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} /> Select all
-            filtered users
+            users on this page
           </label>
 
           {selectedIds.length > 0 ? (
@@ -492,6 +516,7 @@ export default function AdminPassbookPage() {
           rowKey={(user) => user.id}
           emptyMessage="No users found."
         />
+        <Pagination page={page} total={total} onPageChange={setPage} />
       </div>
 
       <AdminActionModal

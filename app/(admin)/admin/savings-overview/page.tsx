@@ -448,7 +448,7 @@ export default function AdminSavingsOverviewPage() {
         <ul className="list-disc list-inside space-y-1 text-blue-800">
           <li><strong>Total in Wallets:</strong> Money users can spend immediately (not locked in savings)</li>
           <li><strong>Total in Savings:</strong> Money locked in savings plans (Current Balance across all plans)</li>
-          <li><strong>Total Paid Out:</strong> Money already withdrawn to users' bank accounts</li>
+          <li><strong>Total Paid Out:</strong> Money already withdrawn to users&apos; bank accounts</li>
           <li><strong>Grand Total:</strong> Wallets + Savings = Total money in the system right now</li>
         </ul>
       </div>
