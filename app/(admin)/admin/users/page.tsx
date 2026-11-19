@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Search, Users } from 'lucide-react';
+import { Pagination, ADMIN_PAGE_SIZE } from '@/components/admin/Pagination';
 import { LastSynced } from '@/components/admin/LastSynced';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { useToast } from '@/components/ui/Toast';
@@ -24,6 +25,8 @@ type UserRow = {
   virtual_account_number?: string | null;
 };
 
+const PAGE_SIZE = ADMIN_PAGE_SIZE;
+
 function initials(value: string) {
   const parts = value.trim().split(/\s+/).slice(0, 2);
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || 'U';
@@ -41,6 +44,10 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ active: 0, suspended: 0, newThisMonth: 0 });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const { showToast } = useToast();
@@ -53,17 +60,31 @@ export default function AdminUsersPage() {
     if (lastEvent?.timestamp) setLastSyncedAt(lastEvent.timestamp);
   }, [lastEvent]);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, roleFilter, statusFilter]);
+
   const loadAll = useCallback(async () => {
-    const usersRes = await fetch('/api/admin/users?page=1&pageSize=100', { cache: 'no-store' });
+    const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    if (roleFilter !== 'all') params.set('role', roleFilter);
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    const usersRes = await fetch(`/api/admin/users?${params.toString()}`, { cache: 'no-store' });
     const usersJson = await usersRes.json();
     if (!usersRes.ok) throw new Error(usersJson.error || 'Failed to load users.');
     setUsers(Array.isArray(usersJson.data) ? usersJson.data : []);
+    setTotal(Number(usersJson.pagination?.total ?? 0));
+    if (usersJson.stats) setStats(usersJson.stats);
     setLastSyncedAt(new Date().toISOString());
-  }, []);
+  }, [page, debouncedSearch, roleFilter, statusFilter]);
 
   useEffect(() => {
     const run = async () => {
-      setLoading(true);
       setError('');
       try {
         await loadAll();
@@ -80,23 +101,10 @@ export default function AdminUsersPage() {
     void loadAll();
   });
 
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
-      if (roleFilter !== 'all' && user.role !== roleFilter) return false;
-      if (statusFilter !== 'all' && user.status !== statusFilter) return false;
-      if (!search.trim()) return true;
-      const haystack = [user.name, user.email, user.phone ?? ''].join(' ').toLowerCase();
-      return haystack.includes(search.toLowerCase());
-    });
-  }, [users, roleFilter, statusFilter, search]);
-
-  const now = new Date();
-  const activeUsers = filteredUsers.filter((u) => u.status === 'active').length;
-  const suspendedUsers = filteredUsers.filter((u) => u.status === 'suspended').length;
-  const newUsersThisMonth = filteredUsers.filter((u) => {
-    const d = new Date(u.created_at);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).length;
+  const filteredUsers = users;
+  const activeUsers = stats.active;
+  const suspendedUsers = stats.suspended;
+  const newUsersThisMonth = stats.newThisMonth;
 
   const allSelected =
     filteredUsers.length > 0 && filteredUsers.every((u) => selectedIds.includes(u.id));
@@ -175,7 +183,7 @@ export default function AdminUsersPage() {
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[
-          { label: 'Total', value: filteredUsers.length, color: 'text-brand-navy' },
+          { label: 'Total', value: total, color: 'text-brand-navy' },
           { label: 'Active', value: activeUsers, color: 'text-emerald-700' },
           { label: 'Suspended', value: suspendedUsers, color: 'text-red-600' },
           { label: 'New month', value: newUsersThisMonth, color: 'text-brand-navy' },
@@ -317,6 +325,13 @@ export default function AdminUsersPage() {
             })}
           </ul>
         )}
+        <Pagination
+          page={page}
+          total={total}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+          className="border-t border-slate-100 bg-slate-50/80 px-3 py-2"
+        />
       </div>
     </div>
   );

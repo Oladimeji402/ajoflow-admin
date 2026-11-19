@@ -144,7 +144,7 @@ function ComposeMessageForm({ templates, onMessageSent }: {
 
         try {
             // Clean up payload before sending
-            const payload: any = {
+            const payload: Record<string, unknown> = {
                 campaign_name: formData.campaign_name,
                 channel: formData.channel,
                 audience_type: formData.audience_type,
@@ -357,7 +357,7 @@ function ComposeMessageForm({ templates, onMessageSent }: {
                         className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm resize-none focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
                     />
                     <p className="text-xs text-slate-500 mt-1">
-                        This will appear in the user's notification center within the app
+                        This will appear in the user&apos;s notification center within the app
                     </p>
                 </div>
             )}
@@ -665,7 +665,7 @@ export default function CommunicationCenterPage() {
                                 Database Migration Required
                             </h3>
                             <p className="text-sm text-amber-800 mb-3">
-                                The Communication Center tables haven't been created yet. Please run the migration file:
+                                The Communication Center tables haven&apos;t been created yet. Please run the migration file:
                             </p>
                             <code className="block bg-amber-100 text-amber-900 px-3 py-2 rounded-lg text-xs font-mono mb-2">
                                 supabase/migrations/20260702000001_communication_center.sql

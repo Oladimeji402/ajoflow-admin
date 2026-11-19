@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Pagination, ADMIN_PAGE_SIZE } from "@/components/admin/Pagination";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Plus, RefreshCw, Check, AlertTriangle, TrendingUp, TrendingDown, Wallet, DollarSign, CheckCircle, Calendar } from "lucide-react";
@@ -14,6 +15,9 @@ export default function SettlementsPage() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [initialLoaded, setInitialLoaded] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -28,8 +32,13 @@ export default function SettlementsPage() {
   });
 
   useEffect(() => {
-    loadData();
+    setPage(1);
   }, [filterStatus]);
+
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterStatus, page]);
 
   const loadData = async () => {
     try {
@@ -41,7 +50,8 @@ export default function SettlementsPage() {
       if (filterStatus !== "all") {
         params.append("status", filterStatus);
       }
-      params.append("limit", "50");
+      params.append("page", String(page));
+      params.append("pageSize", String(ADMIN_PAGE_SIZE));
 
       const settlementsRes = await fetch(`/api/admin/settlements?${params}`);
       const settlementsData = await settlementsRes.json();
@@ -51,6 +61,7 @@ export default function SettlementsPage() {
       }
 
       setSettlements(settlementsData.data || []);
+      setTotal(Number(settlementsData.pagination?.total ?? 0));
 
       // Load summary
       const summaryRes = await fetch("/api/admin/settlements/summary");
@@ -66,6 +77,7 @@ export default function SettlementsPage() {
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
       setLoading(false);
+      setInitialLoaded(true);
     }
   };
 
@@ -158,7 +170,7 @@ export default function SettlementsPage() {
     );
   };
 
-  if (loading) {
+  if (loading && !initialLoaded) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-center h-64">
@@ -364,6 +376,7 @@ export default function SettlementsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} total={total} onPageChange={setPage} disabled={loading} className="border-t border-slate-100 px-5 py-3" />
       </div>
 
       {/* Add Settlement Dialog */}

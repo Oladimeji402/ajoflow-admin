@@ -30,7 +30,9 @@ export function useData<T>(
 ) {
   const { ttl, skip = false } = options;
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  });
 
   const [state, setState] = useState<State<T>>(() => {
     if (skip) return { status: 'idle' };
@@ -69,6 +71,8 @@ export function useData<T>(
     const stale = clientCache.getStale<T>(cacheKey);
     if (stale !== undefined) {
       // Cache is stale — revalidate silently in background.
+      // run() only sets state after awaiting the network; intended fetch-on-mount behaviour.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void run(true);
     } else {
       // No cache at all — full fetch.

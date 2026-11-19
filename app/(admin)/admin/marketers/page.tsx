@@ -17,6 +17,7 @@ import { notifyError, notifySuccess } from '@/lib/toast';
 import { buildReferralSignupUrl } from '@/lib/referrals/referral-code';
 import { AdminActionModal } from '@/components/admin/AdminActionModal';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination, usePagedSlice } from '@/components/admin/Pagination';
 
 type MarketerStatus = 'pending' | 'active' | 'rejected' | 'inactive';
 
@@ -281,6 +282,7 @@ export default function AdminMarketersPage() {
     });
   }, [marketers, statusFilter, search]);
 
+  const paged = usePagedSlice(filtered, `${statusFilter}|${search}`);
   const pendingApps = marketers.filter((m) => m.status === 'pending').length;
   const activeCount = marketers.filter((m) => m.status === 'active').length;
   const totalReferrals = marketers.reduce(
@@ -437,7 +439,7 @@ export default function AdminMarketersPage() {
           <p className="p-8 text-center text-sm text-slate-400">No marketers found.</p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {filtered.map((marketer) => {
+            {paged.pageItems.map((marketer) => {
               const users = marketer.total_users ?? marketer.referral_count;
               return (
                 <li key={marketer.id} className="flex items-center gap-3 px-3 py-3 hover:bg-slate-50/80">
@@ -513,6 +515,12 @@ export default function AdminMarketersPage() {
             })}
           </ul>
         )}
+        <Pagination
+          page={paged.page}
+          total={paged.total}
+          onPageChange={paged.setPage}
+          className="border-t border-slate-100 bg-slate-50/80 px-3 py-2"
+        />
       </div>
 
       {/* Add / Edit marketer modal */}

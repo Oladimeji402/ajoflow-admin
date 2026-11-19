@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import React from 'react';
 import { Chrome, Monitor, Smartphone, Tablet } from 'lucide-react';
 
@@ -35,6 +36,8 @@ export function SessionsList({
   sessions,
   emptyMessage = 'No active sessions found.',
 }: SessionsListProps) {
+  const [now] = useState(() => Date.now());
+
   if (sessions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center">
@@ -50,7 +53,7 @@ export function SessionsList({
         const DeviceIcon = getDeviceIcon(session.deviceType);
         const lastActivityDate = new Date(session.lastActivity);
         const createdDate = new Date(session.createdAt);
-        const isRecent = Date.now() - lastActivityDate.getTime() < 5 * 60 * 1000; // Active in last 5 minutes
+        const isRecent = now - lastActivityDate.getTime() < 5 * 60 * 1000; // Active in last 5 minutes
 
         return (
           <div

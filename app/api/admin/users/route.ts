@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { badRequestResponse, requireAdmin, serverErrorResponse } from "@/lib/api/auth";
+import { sanitizeSearch } from "@/lib/api/pagination";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(request: Request) {
@@ -10,8 +11,9 @@ export async function GET(request: Request) {
     const adminSupabase = createSupabaseAdminClient();
 
     const url = new URL(request.url);
-    const search = url.searchParams.get("search");
+    const search = sanitizeSearch(url.searchParams.get("search"));
     const status = url.searchParams.get("status");
+    const role = url.searchParams.get("role");
     const page = Math.max(Number(url.searchParams.get("page") ?? 1), 1);
     const pageSize = Math.min(Math.max(Number(url.searchParams.get("pageSize") ?? 20), 1), 100);
 
@@ -22,10 +24,24 @@ export async function GET(request: Request) {
       .range((page - 1) * pageSize, page * pageSize - 1);
 
     if (status) query = query.eq("status", status);
+    if (role) query = query.eq("role", role);
     if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
 
     const { data, error, count } = await query;
     if (error) return badRequestResponse(error.message);
+
+    // Counts across all users (ignoring pagination) for the summary tiles
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const [activeRes, suspendedRes, newRes, todayRes] = await Promise.all([
+      adminSupabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "active"),
+      adminSupabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "suspended"),
+      adminSupabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", monthStart.toISOString()),
+      adminSupabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", todayStart.toISOString()),
+    ]);
 
     const rows = Array.isArray(data) ? data : [];
     const userIds = rows.map((row) => row.id).filter(Boolean);
@@ -62,6 +78,12 @@ export async function GET(request: Request) {
         page,
         pageSize,
         total: count ?? 0,
+      },
+      stats: {
+        active: activeRes.count ?? 0,
+        suspended: suspendedRes.count ?? 0,
+        newThisMonth: newRes.count ?? 0,
+        newToday: todayRes.count ?? 0,
       },
     });
   } catch {

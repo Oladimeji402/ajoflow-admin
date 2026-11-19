@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Loader2, X, Calendar, CreditCard } from 'lucide-react';
+import { Pagination, usePagedSlice } from '@/components/admin/Pagination';
 import { LastSynced } from '@/components/admin/LastSynced';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { useToast } from '@/components/ui/Toast';
@@ -68,6 +69,8 @@ function PaymentHistoryTab() {
     );
   }, [payments, searchTerm]);
 
+  const historyPaged = usePagedSlice(filtered, searchTerm);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-sm text-brand-gray">
@@ -132,7 +135,7 @@ function PaymentHistoryTab() {
                   </td>
                 </tr>
               )}
-              {filtered.map((payment) => (
+              {historyPaged.pageItems.map((payment) => (
                 <tr key={payment.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-4">
                     <p className="text-xs text-slate-600">{new Date(payment.paid_at).toLocaleDateString()}</p>
@@ -174,13 +177,19 @@ function PaymentHistoryTab() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={historyPaged.page}
+          total={historyPaged.total}
+          onPageChange={historyPaged.setPage}
+          className="border-t border-slate-100 px-4 py-3"
+        />
       </div>
 
       {/* Footer Note */}
       <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
         <p className="font-semibold mb-1">✅ Payment History</p>
         <p className="text-emerald-800">
-          This shows all completed payouts to users. Each entry represents money that has been sent to a user's bank account.
+          This shows all completed payouts to users. Each entry represents money that has been sent to a user&apos;s bank account.
           You can search by user name, email, plan name, or reference number.
         </p>
       </div>
@@ -273,6 +282,8 @@ function SavingsScheduleTab() {
     }
   };
 
+  const schedulePaged = usePagedSlice(filtered, `${freqFilter}|${showDueOnly}`);
+
   if (loading) return <div className="flex items-center justify-center gap-2 py-16 text-sm text-brand-gray"><Loader2 size={16} className="animate-spin" /> Loading schedule...</div>;
 
   const totalOwed = filtered.reduce((s, r) => s + r.amount_owed, 0);
@@ -324,11 +335,11 @@ function SavingsScheduleTab() {
 
         {filtered.length === 0 && <p className="p-8 text-center text-sm text-slate-400">No savings schemes found.</p>}
 
-        {filtered.map((row, idx) => (
+        {schedulePaged.pageItems.map((row, idx) => (
           <div
             key={row.scheme_id}
             onClick={() => { setSelected(row); setPayoutForm({ amount: String(row.amount_owed), periodLabel: '', notes: '' }); }}
-            className={`grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 px-4 py-3.5 cursor-pointer hover:bg-slate-50 transition-colors${idx < filtered.length - 1 ? ' border-b border-slate-100' : ''}`}
+            className={`grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 px-4 py-3.5 cursor-pointer hover:bg-slate-50 transition-colors${idx < schedulePaged.pageItems.length - 1 ? ' border-b border-slate-100' : ''}`}
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-brand-navy">{row.profile?.name || row.profile?.email || 'User'}</p>
@@ -340,6 +351,12 @@ function SavingsScheduleTab() {
             <p className="hidden sm:block shrink-0 text-xs text-brand-gray">{row.next_payout}</p>
           </div>
         ))}
+        <Pagination
+          page={schedulePaged.page}
+          total={schedulePaged.total}
+          onPageChange={schedulePaged.setPage}
+          className="border-t border-slate-100 px-4 py-3"
+        />
       </div>
 
       {/* Record payout drawer */}
@@ -431,17 +448,12 @@ function SavingsScheduleTab() {
 
 export default function AdminPayoutsPage() {
   const [activeTab, setActiveTab] = useState<'schedule' | 'history'>('schedule');
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const { lastEvent } = useRealtimeSubscription({
     channelName: 'admin-payouts-live',
     tables: ['passbook_payouts', 'profiles', 'savings_schemes'],
   });
 
-  useEffect(() => {
-    if (lastEvent?.timestamp) {
-      setLastSyncedAt(lastEvent.timestamp);
-    }
-  }, [lastEvent]);
+  const lastSyncedAt = lastEvent?.timestamp ?? null;
 
   return (
     <div className="space-y-5">
